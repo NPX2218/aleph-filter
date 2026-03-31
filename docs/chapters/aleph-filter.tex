@@ -12,7 +12,7 @@ tables accumulate.
 
 The Aleph Filter \cite{aleph} builds directly on InfiniFilter's 
 architecture, using the same slot format, variable-length fingerprints, 
-and unary padding, but changes how void entries are handled during 
+and unary padding (self-delimiting age encoding), but it changes how void entries are handled during 
 expansion. This single change, combined with two supporting mechanisms, 
 yields $\bigO{1}$ worst-case time for all operations while expanding 
 infinitely.
@@ -438,7 +438,7 @@ and how many duplicates each entry has:
 
 The $(X - j)$ terms cancel completely. Every void generation, 
 regardless of age, contributes exactly the same fraction of the 
-table: $\alpha \cdot 2^{-F-1}$. This is the key insight. The 
+table: $\alpha \cdot 2^{-F-1}$. This balancing act is the key insight. The 
 entries requiring the most duplication are exponentially rare, and 
 that exponential rarity perfectly offsets the exponential duplication.
 
@@ -985,7 +985,7 @@ The complete Aleph Filter architecture consists of:
     Quotient \cite{quotient}
     & $\bigO{1}$* & \checkmark & \checkmark & \texttimes & $\bigO{1}$* \\
     InfiniFilter \cite{infinifilter}
-    & $\bigO{\log N}$ & \checkmark & \checkmark & \checkmark & $\bigO{1}$ \\
+    & $\bigO{\log(N)/F}$ & \checkmark & \checkmark & \checkmark & $\bigO{1}$ \\
     \textbf{Aleph Filter} \cite{aleph}
     & $\bigO{1}$ & \checkmark & \checkmark & \checkmark & $\bigO{1}$ \\
     \hline
@@ -995,7 +995,9 @@ The complete Aleph Filter architecture consists of:
   {\small * = amortized, meaning individual operations are usually 
   $\bigO{1}$ but rare expensive operations (eviction chains or 
   run shifts) bring the average to $\bigO{1}$ when spread across 
-  many operations. Performance degrades at high load factors.}
+  many operations. Performance degrades at high load factors. For
+  InfiniFilter, $\bigO{\log(N)/F}$ is equivalent to $\bigO{\log N}$ when
+  $F$ is treated as a constant.}
 \end{table}
 
 Each row in Table~\ref{tab:full-comparison} solves a limitation of 

@@ -30,7 +30,7 @@ reconstruct the full hash: $h(x) = h_q(x) \| h_r(x)$, where $\|$
 denotes concatenation.
 \end{definitionbox}
 
-This is fundamentally different from the cuckoo filter's approach. 
+This clean reconstruction property is fundamentally different from the cuckoo filter's approach. 
 Recall that in a cuckoo filter, the bucket index comes from 
 $H(x) \mod m$ and the fingerprint comes from a separate 
 portion of the hash. The modulo operation is \textbf{lossy}: multiple 
@@ -38,7 +38,7 @@ distinct hash values map to the same remainder (e.g., both
 $10 \mod 8 = 2$ and $18 \mod 8 = 2$), so knowing 
 $H(x) \mod m$ does not reveal what $H(x) \mod m'$ would be for 
 a different table size $m'$. This lost information is precisely what 
-prevents cuckoo filters from expanding. In a quotient filter, the concatenating them reconstructs the original value exactly, so no 
+prevents cuckoo filters from expanding. In a quotient filter, the quotient and remainder reconstruct the original value exactly, so no 
 information is ever lost.
 
 % ---- EXAMPLE: Hash split diagram ----
@@ -156,7 +156,7 @@ home slot and \texttt{"cat"}'s larger remainder (11010) is placed after it:
 \end{figure}
 
 The set of remainders sharing the same quotient is called a \textbf{run}. 
-A sequence of contiguous runs is called a \textbf{cluster}. As the table 
+A sequence of contiguous runs is called a \textbf{cluster}; as the table 
 fills, clusters grow longer, which increases lookup time, a limitation 
 we will revisit.
 
@@ -192,7 +192,7 @@ key relationships are:
         \texttt{is\_shifted = 0} is \textbf{empty}.
   \item A slot with \texttt{is\_shifted = 0} and 
         \texttt{is\_continuation = 0} marks the \textbf{start of a 
-        cluster}, meaning its the first element of a run in its home slot.
+        cluster}, meaning it is the first element of a run in its home slot.
   \item \texttt{is\_continuation = 0} marks the \textbf{start of a new 
         run} within a cluster.
   \item \texttt{is\_occupied} is attached to the \emph{slot index}, not 
@@ -359,7 +359,7 @@ worst case, if all elements hash to the same quotient, a single run
 could span the entire table, requiring $O(n)$ time. In practice with a 
 good hash function, runs are short and expected lookup time is $O(1)$. 
 However, as the load factor increases, clusters grow and performance 
-degrades, quotient filters are typically not filled beyond 75\% 
+degrades; quotient filters are typically not filled beyond 75\% 
 \cite{quotient}.
 
 
@@ -723,19 +723,23 @@ now search the main table \emph{and} all secondary tables:
     % Annotation
     \node[lbl, text=AccentRed, align=left, font=\small] at (7.5, -3.5) {
       Must check \textbf{every} table\\
-      Query time: $\bigO{\log N}$\\
+      Query time: $\bigO{\log(N)/F}$\\
       (one table per expansion)
     };
   \end{tikzpicture}
   \caption{InfiniFilter stores void entries in secondary hash tables. 
-           Queries must search all tables, degrading to $\bigO{\log N}$.}
+           In the fixed-width regime, queries may need to search all tables,
+           degrading to $\bigO{\log(N)/F}$ (equivalently $\bigO{\log N}$ for
+           constant $F$).}
   \label{fig:infinifilter}
 \end{figure}
 
 With each expansion adding a new secondary table, the number of tables 
-grows as $\bigO{\log N}$ (where $N$ is the total number of insertions). 
+grows as $\bigO{\log(N)/F}$ in the fixed-width regime (where $N$ is the 
+total number of insertions and $F$ is the base fingerprint length). 
 A query that targets a non-existent key or an old key must search every 
-table, giving worst-case $\bigO{\log N}$ query time, a significant 
+table, giving worst-case $\bigO{\log(N)/F}$ query time (or $\bigO{\log N}$ 
+for constant $F$), a significant 
 degradation from the $\bigO{1}$ queries of the original quotient filter.
 
 \subsection{The Aleph Filter's Solution: Void Duplication}
@@ -827,7 +831,7 @@ develops in full detail. The complete design addresses three challenges:
   Bloom filter     & \texttimes & \texttimes & $\bigO{k}$       & \texttimes \\
   Cuckoo filter    & \checkmark & \texttimes & $\bigO{1}$       & \texttimes \\
   Quotient filter  & \checkmark & \checkmark & $\bigO{1}$*      & \texttimes \\
-  InfiniFilter     & \checkmark & \checkmark & $\bigO{\log N}$  & \checkmark \\
+  InfiniFilter     & \checkmark & \checkmark & $\bigO{\log(N)/F}$  & \checkmark \\
   \textbf{Aleph Filter} & \checkmark & \checkmark & $\bigO{1}$ & \checkmark \\
   \hline
 \end{tabular}

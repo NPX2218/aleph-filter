@@ -21,12 +21,12 @@
 
   \subsection{Competing Implementations}
 
-  We benchmarked the following Rust crate implementations:
+  We benchmarked the following Rust crate libraries:
 
   \begin{itemize}
     \item \textbf{Bloom Filter}: \texttt{bloomfilter} v1.0.16 (standard Bloom with optimal $k$)
     \item \textbf{Cuckoo Filter}: \texttt{cuckoofilter} v0.5.0 (4-way set-associative)
-    \item \textbf{Xor Filter} (Xor8): \texttt{xorf} v0.11.0 (static/immutable, 8-bit fingerprints)
+    \item \textbf{Xor Filter (Xor8)}: \texttt{xorf} v0.11.0 (static/immutable, 8-bit fingerprints)
     \item \textbf{Aleph Filter}: Our implementation (\texttt{aleph-filter} v0.1.0, xxHash3)
   \end{itemize}
 
@@ -100,7 +100,7 @@
   % --- POSITIVE LOOKUP ---
   \subsection{Positive Lookup Throughput}
 
-  Queries keys that are known to be in the filter (should all return \texttt{true}).
+  Queries for keys that are known to be in the filter (should all return \texttt{true}).
 
   \begin{table}[H]
     \centering
@@ -120,7 +120,7 @@
   % --- NEGATIVE LOOKUP ---
   \subsection{Negative Lookup Throughput}
 
-  Queries keys that are \emph{not} in the filter. This measures the common-case
+  Queries for keys that are \emph{not} in the filter. This measures the common-case
   query path (early rejection).
 
   \begin{table}[H]
@@ -144,7 +144,7 @@
     and Cuckoo (58--59 Melem/s). Xor8 dominates at $\sim$575 Melem/s due to its cache-friendly
     immutable structure, but cannot support dynamic operations.
 
-    At $N = 100{,}000$, Aleph's quotient-filter structure (linear probing clusters) shows
+    At $N = 100{,}000$, the Aleph Filter's quotient-filter structure (linear probing clusters) shows
     some cache pressure, where Bloom's random-access pattern becomes relatively more efficient.
     This is expected from quotient-filter architectures and aligns with the original paper's observations.
   \end{insightbox}
@@ -240,8 +240,8 @@
   \end{table}
 
   \begin{warningbox}[Expansion Cost]
-    Starting from a 64-slot filter, the amortized insert cost with expansion (195 ns/op)
-    is $\sim$13$\times$ slower than pre-sized insertion (15 ns/op). This overhead comes from
+    Starting from a 64-slot filter, inserting with expansion (195 ns/op amortized)
+    is approximately 13$\times$ slower than pre-sized insertion (15 ns/op). This overhead comes from
     the $\bigO{n}$ re-insertion during each expansion. Users who know the approximate
     dataset size should pre-size the filter via \texttt{AlephFilter::new(expected\_items, fpr)}
     to avoid this cost. However, the filter's ability to expand indefinitely is unique

@@ -67,7 +67,7 @@ fn qf_insert_slot(&mut self, canonical: usize, slot: Slot) -> bool {
 }
 \end{lstlisting}
 
-This matches the quotient-filter model: split into quotient/remainder, then either create a new run or append into an existing run while preserving \texttt{occupied}, \texttt{continuation}, and \texttt{shifted} metadata.
+This closely matches the quotient-filter model: split the hash into quotient/remainder, then either create a new run or append into an existing run while preserving \texttt{occupied}, \texttt{continuation}, and \texttt{shifted} metadata.
 
 % Subsection
 \subsection{Query}
@@ -203,9 +203,9 @@ So the implementation preserves quotient-filter cluster invariants for regular d
 \subsubsection{Void Deletion: Our Simplification}
 \label{sec:void-delete-tradeoff}
 
-The paper's full deletion algorithm for void entries involves two phases. In Phase~1, the void entry at the queried slot is immediately replaced with a tombstone. In Phase~2, deferred to the next expansion, the filter looks up the void entry's mother hash in a secondary filter chain, computes the locations of all $2^{k-b}$ duplicate copies (where $k = \log_2(\text{table size})$ and $b$ is the length of the mother hash), and removes every one of them.
+The paper's full deletion algorithm for void entries involves two phases. In Phase 1, the void entry at the queried slot is immediately replaced with a tombstone. In Phase 2, deferred to the next expansion, the filter looks up the void entry's mother hash in a secondary filter chain, computes the locations of all $2^{k-b}$ duplicate copies (where $k = \log_2(\text{table size})$ and $b$ is the length of the mother hash), and removes every one of them.
 
-Our implementation performs \textbf{only Phase~1}. The relevant code is straightforward:
+Our implementation performs \textbf{only Phase 1}. The relevant code is as follows:
 
 \begin{lstlisting}[caption={Void deletion in our Rust implementation}]
 if self.slots[del_pos].is_void() {
@@ -214,7 +214,7 @@ if self.slots[del_pos].is_void() {
 }
 \end{lstlisting}
 
-We tombstone the void entry at the slot where the query found it, but we do not track down or remove any of its duplicates. This has two concrete consequences:
+We place a tombstone at the canonical slot where the query found the match, but we do not track down or remove any of its duplicates. This has two concrete consequences:
 
 \begin{table}[H]
   \centering
@@ -257,7 +257,7 @@ For workloads that do not delete old entries, this gap never manifests. For work
 \section{Fidelity to the Paper}
 % ============================================================================
 
-This section documents exactly what matches and what was intentionally simplified compared the official rust implementation at \texttt{github.com/nivdayan/AlephFilter} (branch \texttt{aleph\_filter}), to make the scope of this implementation clear. 
+This section documents exactly what matches and what was intentionally simplified compared to the official Rust implementation at \texttt{github.com/nivdayan/AlephFilter} (branch \texttt{aleph\_filter}), to make the scope of this implementation clear.
 
 \subsection{What Matches Exactly}
 

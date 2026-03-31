@@ -67,7 +67,7 @@ browser perform a more expensive server-side check.
 
 \subsection{Structure and Operations}
 
-A Bloom filter consists of two components
+A Bloom filter consists of two components:
 \begin{enumerate}
   \item A \textbf{bit array} $B$ of $m$ bits, where:
   \[
@@ -96,7 +96,7 @@ whether all $k$ bits are set:
 
 
 
-If any bit $B[h_i(x)] = 0$, then $x$ was never inserted,  this is 
+If any bit $B[h_i(x)] = 0$, then $x$ was never inserted; this is 
 certain because insertion only sets bits to 1, never back to 0. If all 
 $k$ bits are 1, then either $x$ was inserted, or other insertions 
 happened to set those same bits, which creates a false positive.
@@ -542,7 +542,7 @@ filters so widely deployed.
 
 From an information-theoretic perspective, any data structure that answers 
 membership queries with a false positive rate of $\epsilon$ must use at 
-least $\log_2(1/\epsilon)$ bits per element, this is the minimum amount 
+least $\log_2(1/\epsilon)$ bits per element; this is the minimum amount 
 of information needed to distinguish ``in the set'' from ``not in the set'' 
 with error probability $\epsilon$.
 
@@ -554,7 +554,7 @@ sides gives:
 \]
 
 A space-optimized Bloom filter therefore uses $1.44 \log_2(1/\epsilon)$ bits 
-per element \cite{bloom, cuckoo}, which is a 44\% overhead over the 
+per element \cite{mitzenmacher, cuckoo}, which is a 44\% overhead over the 
 information-theoretic lower bound of $\log_2(1/\epsilon)$ bits. In practice, 
 this overhead is a modest price for the simplicity and speed of the data 
 structure.
@@ -607,12 +607,12 @@ either $T_1[h_1(x)]$ or $T_2[h_2(x)]$.
 
 \subsection{Structure and Operations}
 
-The data structure is initalized to 
+The data structure is initialized to 
 \[
   T_1[j] \leftarrow \varnothing \quad \text{and} \quad T_2[j] \leftarrow \varnothing 
-  \quad \forall \, j \in \{0, 1, \dots, rr-1\}
+  \quad \forall \, j \in \{0, 1, \dots, r-1\}
 \]
-The data structure supports three operations:
+The data structure supports the following operations:
 \begin{enumerate}
   \item \textbf{Search:} To determine whether $x \in S$, we examine 
         $T_1[h_1(x)]$ and $T_2[h_2(x)]$. Since each lookup is a direct 
