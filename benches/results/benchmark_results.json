@@ -1,6 +1,6 @@
 {
   "timestamp": "2026-03-30T18:20:16-0700",
-  "system_info": "Darwin Neels-MacBook-Air.local 25.3.0 Darwin Kernel Version 25.3.0: Wed Jan 28 20:54:55 PST 2026; root:xnu-12377.91.3~2/RELEASE_ARM64_T8132 arm64",
+  "system_info": "MacBook Air M4, 24GB RAM, macOS 26.3.1 (a)",
   "rust_version": "0.1.0",
   "benchmarks": [
     {
