@@ -1,0 +1,1006 @@
+\chapter{The Aleph Filter}
+
+\section{Overview}
+
+The previous chapter established that quotient filters can expand 
+without access to the original keys by moving the quotient-remainder 
+split point. However, after enough expansions, old entries run out of 
+fingerprint bits and become \emph{void entries}. InfiniFilter 
+\cite{infinifilter} handles void entries by moving them to secondary 
+hash tables, but this degrades query time to $\bigO{\log N}$ as more 
+tables accumulate.
+
+The Aleph Filter \cite{aleph} builds directly on InfiniFilter's 
+architecture, using the same slot format, variable-length fingerprints, 
+and unary padding, but changes how void entries are handled during 
+expansion. This single change, combined with two supporting mechanisms, 
+yields $\bigO{1}$ worst-case time for all operations while expanding 
+infinitely.
+
+This chapter presents the three contributions in order. We begin with 
+the slot format inherited from InfiniFilter, then introduce void 
+entry duplication (Section~\ref{sec:void-duplication}), 
+the core idea that enables constant-time queries 
+(Section~\ref{sec:constant-queries}). We then cover tombstone-based 
+deletes (Section~\ref{sec:tombstone-deletes}) and rejuvenation 
+(Section~\ref{sec:rejuvenation}), two mechanisms that keep the filter 
+efficient under updates. Finally, we analyze the FPR 
+(Section~\ref{sec:fpr-analysis}), describe the operating regimes 
+(Section~\ref{sec:regimes}), and summarize the full architecture.
+
+
+\begin{insightbox}[The Three Contributions]
+\begin{enumerate}
+  \item \textbf{Void entry duplication:} during expansion, void 
+        entries are copied to \emph{both} possible new slots, keeping 
+        everything in one table $\rightarrow$ $\bigO{1}$ queries.
+  \item \textbf{Tombstone-based deletes:} deleting a void entry 
+        replaces it with a tombstone and defers duplicate removal to 
+        the next expansion $\rightarrow$ $\bigO{1}$ deletes.
+  \item \textbf{Rejuvenation:} void entries are periodically replaced 
+        with fresh fingerprints, preventing unbounded accumulation of 
+        duplicates $\rightarrow$ stable FPR.
+\end{enumerate}
+\end{insightbox}
+
+
+% ============================================================================
+\section{Structure}
+% ============================================================================
+
+The Aleph Filter inherits InfiniFilter's slot format. Each slot in the 
+main hash table stores three metadata bits followed by a data region 
+containing a variable-length fingerprint and a self-delimiting unary 
+code \cite{infinifilter, aleph}:
+
+% ---- Diagram: Slot format ----
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    % Title
+    \node[lbl, font=\bfseries] at (0, 4.2) 
+      {Slot format (example: 12-bit slots = 3 metadata + 9 data bits)};
+    
+    % New entry (long fingerprint)
+    \node[lbl, anchor=east] at (-3, 2.5) {New entry:};
+    \node[slot, fill=MedGray!15, minimum width=0.7cm] at (-2, 2.5) 
+      {\scriptsize meta};
+    \foreach \i/\val in {0/1, 1/0, 2/1, 3/1, 4/0, 5/1, 6/1, 7/0} {
+      \node[bit, fill=AccentTeal!15] at ({-1.3 + \i*0.45}, 2.5) 
+        {\tiny \val};
+    }
+    \node[bit, fill=AccentOrange!20] at ({-1.3 + 8*0.45}, 2.5) {\tiny 0};
+    \draw[brace] ({-1.3 - 0.18}, 2.95) -- ({-1.3 + 7*0.45 + 0.18}, 2.95)
+      node[midway, above=10pt, font=\scriptsize, text=AccentTeal] 
+      {fingerprint (8 bits)};
+    \node[font=\scriptsize, text=AccentOrange, anchor=west] 
+      at ({-1.3 + 8*0.45 + 0.3}, 2.5) {unary};
+
+    % Old entry (short fingerprint)
+    \begin{scope}[yshift=-20pt]
+    \node[lbl, anchor=east] at (-3, 1.3) {Old entry:};
+    \node[slot, fill=MedGray!15, minimum width=0.7cm] at (-2, 1.3) 
+      {\scriptsize meta};
+    \foreach \i/\val in {0/1, 1/1, 2/0} {
+      \node[bit, fill=AccentTeal!15] at ({-1.3 + \i*0.45}, 1.3) 
+        {\tiny \val};
+    }
+    \foreach \i/\val in {3/1, 4/0, 5/0, 6/0, 7/0, 8/0} {
+      \node[bit, fill=AccentOrange!20] at ({-1.3 + \i*0.45}, 1.3) 
+        {\tiny \val};
+    }
+    \draw[brace] ({-1.3 - 0.18}, 1.75) -- ({-1.3 + 2*0.45 + 0.18}, 1.75)
+      node[midway, above=10pt, font=\scriptsize, text=AccentTeal] 
+      {fp (3 bits)};
+    \draw[brace] ({-1.3 + 3*0.45 - 0.18}, 1.75) -- 
+      ({-1.3 + 8*0.45 + 0.18}, 1.75)
+      node[midway, above=10pt, font=\scriptsize, text=AccentOrange] 
+      {unary (6 bits)};
+    \end{scope}
+
+    % Void entry (no fingerprint)
+    \begin{scope}[yshift=-40pt]
+    \node[lbl, anchor=east] at (-3, 0.1) {Void entry:};
+    \node[slot, fill=MedGray!15, minimum width=0.7cm] at (-2, 0.1) 
+      {\scriptsize meta};
+    \foreach \i/\val in {0/1, 1/1, 2/1, 3/1, 4/1, 5/1, 6/1, 7/1} {
+      \node[bit, fill=VoidColor] at ({-1.3 + \i*0.45}, 0.1) 
+        {\tiny \val};
+    }
+    \node[bit, fill=VoidColor] at ({-1.3 + 8*0.45}, 0.1) {\tiny 0};
+    \draw[brace] ({-1.3 - 0.18}, 0.55) -- ({-1.3 + 8*0.45 + 0.18}, 0.55)
+      node[midway, above=10pt, font=\scriptsize, text=AccentOrange] 
+      {all unary (0 fingerprint bits)};
+    \end{scope}
+    % Tombstone
+    \begin{scope}[yshift=-60pt]
+
+    \node[lbl, anchor=east] at (-3, -1.1) {Tombstone:};
+    \node[slot, fill=MedGray!15, minimum width=0.7cm] at (-2, -1.1) 
+      {\scriptsize meta};
+    \foreach \i in {0,...,8} {
+      \node[bit, fill=TombstoneColor] at ({-1.3 + \i*0.45}, -1.1) 
+        {\tiny 1};
+    }
+    \draw[brace] ({-1.3 - 0.18}, -0.65) -- ({-1.3 + 8*0.45 + 0.18}, -0.65)
+      node[midway, above=10pt, font=\scriptsize, text=AccentRed] 
+      {all 1s (special marker)};
+    \end{scope}
+  \end{tikzpicture}
+  \caption{The four possible slot states in an Aleph Filter. The unary 
+           code is self-delimiting: read 1s until a 0 is encountered, 
+           then the remaining bits are the fingerprint. A void entry has 
+           no fingerprint; a tombstone is distinguished by an all-1s 
+           pattern.}
+  \label{fig:slot-format}
+\end{figure}
+
+The unary code allows the filter to store variable-length fingerprints 
+within fixed-width slots. Newer entries receive longer fingerprints 
+(more information, fewer false positives), while older entries that
+have survived multiple expansions have shorter fingerprints. This is 
+the key mechanism inherited from InfiniFilter that allows infinite 
+expansion \cite{infinifilter}.
+
+It is important to note that only the stored fingerprint shrinks 
+across expansions. The hash function always produces a fixed-length 
+output (e.g., 64 bits). When a new entry is inserted into a large 
+table, the hash is split at the current table size: more bits go to 
+the quotient (slot address), but the fingerprint is still initialized 
+to $F$ bits. The void problem only affects \emph{old} entries, 
+because they were inserted when the table was smaller and only a 
+small slice of the hash was saved. The bits that were discarded at 
+insertion time cannot be recovered, so after enough expansions the 
+stored slice is fully consumed. New entries, by contrast, always have 
+access to the full hash output and simply reach deeper into it for 
+the larger quotient while still reserving $F$ bits for the fingerprint:
+
+\[
+\underbrace{q \text{ bits}}_{\log_2(\text{table size})} \;\Big|\; 
+\underbrace{F \text{ bits}}_{\text{fingerprint}} \;\Big|\; 
+\underbrace{\text{unused bits}}_{\text{discarded}}
+\]
+
+As the table grows, $q$ increases and the unused portion shrinks, 
+but $F$ stays the same for every new insertion. In theory, if the 
+table ever reached $2^{64}$ slots (far beyond any practical system), 
+even new entries would have no room for fingerprints.
+
+\subsection{The Mother Hash}
+\label{sec:mother-hash}
+
+As an entry survives expansions, the quotient-remainder split point 
+slides through its hash: fingerprint bits are consumed one by one to 
+extend the quotient (slot address). By the time an entry becomes void, 
+its slot address in the main table contains all the hash bits that 
+were ever stored for it: the original quotient bits plus every 
+fingerprint bit that was transferred across expansions. This 
+accumulated slot address is the entry's \textbf{mother hash}.
+
+A mother hash inserted at Generation $j$ (when the table had 
+$2^j$ slots and the quotient was $j$ bits) and that had $F$ 
+fingerprint bits at insertion will have $j + F$ total bits when it 
+becomes void. An entry inserted later, at Generation $j'$ where 
+$j' > j$, started with a longer quotient ($j'$ bits) and the same 
+$F$ fingerprint bits, giving a mother hash of $j' + F$ bits. 
+Therefore, \textbf{newer entries have longer mother hashes than 
+older entries}.
+
+Understanding the mother hash is essential for the delete and 
+rejuvenation mechanisms described in 
+Sections~\ref{sec:tombstone-deletes} and~\ref{sec:rejuvenation}. The 
+mother hash tells the filter where all of a void entry's duplicates 
+are located, enabling their removal.
+
+With the slot format and mother hash concept in place, we now turn to 
+the Aleph Filter's core contribution: how it handles void entries 
+during expansion.
+
+
+% ============================================================================
+\section{Void Entry Duplication}
+\label{sec:void-duplication}
+% ============================================================================
+
+This section describes the Aleph Filter's core innovation. During 
+expansion, each non-void entry moves to one of two possible slots in 
+the expanded table. The lowest bit of its remainder determines which 
+slot: if the old quotient is $q$, the new slot is either $2q$ (if the 
+bit is 0) or $2q + 1$ (if the bit is 1). After moving, that bit is 
+removed from the remainder.
+
+A void entry has no remaining bits. It cannot determine which of the 
+two new slots it belongs to. InfiniFilter solves this by moving void 
+entries to secondary hash tables \cite{infinifilter}. The Aleph Filter 
+takes a different approach: \textbf{duplicate the void entry into both 
+possible slots} \cite{aleph}.
+
+The intuition is straightforward: since the filter does not know 
+whether the missing bit would have been 0 or 1, it places the entry 
+in both branches. On the next expansion, each copy faces the same 
+ambiguity and is again placed in both child slots. This continues for 
+every subsequent expansion, so no matter what the original key's full 
+hash would have resolved to, a void entry is guaranteed to be waiting 
+at the correct slot.
+
+\begin{definitionbox}[Void Duplication]
+During expansion, for each void entry at slot $q$ in the old table, 
+the Aleph Filter places a void entry at \emph{both} slot $2q$ and 
+slot $2q + 1$ in the expanded table. This ensures that regardless of 
+which slot the original element's hash would have directed it to, a 
+matching entry is present.
+\end{definitionbox}
+
+\subsection{Worked Example}
+
+Consider a filter with 4 slots ($2^2$) containing a void entry at 
+slot 3 (binary: \texttt{11}). During expansion to 8 slots ($2^3$), 
+slot 3 could map to either slot 6 (\texttt{110}) or slot 7 
+(\texttt{111}):
+
+% ---- Diagram: Void duplication step by step ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    % BEFORE
+    \node[lbl, font=\bfseries] at (1.8, 2) {Before Expansion (4 slots)};
+    \foreach \i/\content/\style in {0//emptyslot, 1//emptyslot, 
+                                     2//emptyslot, 3/V/voidslot} {
+      \node[\style, minimum width=1.2cm] (a\i) at (\i*1.4, 1.2) 
+        {\content};
+      \node[font=\tiny, text=MedGray] at (\i*1.4, 0.65) {\i};
+    }
+    
+    % Arrow
+    \draw[arrow, very thick, AccentBlue] (2.1, 0.3) -- (2.1, -0.4)
+      node[midway, right=4pt, font=\small] {expand};
+    
+    % AFTER
+    \node[lbl, font=\bfseries] at (2.5, -0.9) {After Expansion (8 slots)};
+    \foreach \i in {0,...,7} {
+      \node[emptyslot, minimum width=0.9cm] (b\i) at (\i*1.05, -1.7) {};
+      \node[font=\tiny, text=MedGray] at (\i*1.05, -2.25) {\i};
+    }
+    
+    % Void duplicated to BOTH slots
+    \node[voidslot, minimum width=0.9cm] at (6*1.05, -1.7) {V};
+    \node[voidslot, minimum width=0.9cm] at (7*1.05, -1.7) {V};
+    
+    % Arrows from old slot to both new slots
+    \draw[arrow, AccentRed, thick] (a3.south) to[out=-70, in=90] 
+      (6*1.05, -1.35);
+    \draw[arrow, AccentRed, thick] (a3.south) to[out=-50, in=90] 
+      (7*1.05, -1.35);
+    
+    % Labels
+    \node[font=\scriptsize, text=AccentRed] at (4.8, -0.4) 
+      {$2q = 6$};
+    \node[font=\scriptsize, text=AccentRed] at (8.2, -0.5) 
+      {$2q+1 = 7$};
+    
+    % Brace
+  \draw[decorate, decoration={brace, amplitude=5pt, mirror}, thick, black] 
+  (6*1.05 - 0.4, -2.5) -- (7*1.05 + 0.4, -2.5)
+    node[midway, below=8pt, font=\scriptsize, text=AccentGreen] 
+    {copy in both!};
+  \end{tikzpicture}
+  \caption{A void entry at slot 3 is duplicated to slots 6 and 7 during 
+           expansion. The filter cannot determine which is correct, so 
+           it places a copy in both.}
+  \label{fig:void-dup-example}
+\end{figure}
+
+On the next expansion (8 $\rightarrow$ 16 slots), each void copy 
+duplicates again. The copy at slot 6 (\texttt{110}) goes to slots 12 
+(\texttt{1100}) and 13 (\texttt{1101}). The copy at slot 7 
+(\texttt{111}) goes to slots 14 (\texttt{1110}) and 15 
+(\texttt{1111}). The entry now has 4 copies:
+
+% ---- Diagram: Exponential duplication ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    % Level 0: 1 copy
+    \node[voidslot, minimum width=1cm] (v0) at (0, 0) {V};
+    \node[lbl, font=\scriptsize, anchor=east] at (-1, 0) 
+      {4 slots:};
+    
+    % Level 1: 2 copies
+    \node[voidslot, minimum width=0.8cm] (v1a) at (-1.5, -1.5) {V};
+    \node[voidslot, minimum width=0.8cm] (v1b) at (1.5, -1.5) {V};
+    \node[lbl, font=\scriptsize, anchor=east] at (-3, -1.5) 
+      {8 slots:};
+    \node[font=\scriptsize, text=MedGray] at (1.2, 0) {slot 3};
+
+    \node[font=\scriptsize, text=MedGray] at (-2.5, -1.5) {slot 6};
+    \node[font=\scriptsize, text=MedGray] at (2.5, -1.5) {slot 7};
+    
+    % Level 2: 4 copies
+    \node[voidslot, minimum width=0.7cm] (v2a) at (-3, -3.2) {V};
+    \node[voidslot, minimum width=0.7cm] (v2b) at (-1, -3.2) {V};
+    \node[voidslot, minimum width=0.7cm] (v2c) at (1, -3.2) {V};
+    \node[voidslot, minimum width=0.7cm] (v2d) at (3, -3.2) {V};
+    \node[lbl, font=\scriptsize, anchor=east] at (-4.2, -3.2) 
+      {16 slots:};
+    \node[font=\scriptsize, text=MedGray] at (-3, -3.9) {12};
+    \node[font=\scriptsize, text=MedGray] at (-1, -3.9) {13};
+    \node[font=\scriptsize, text=MedGray] at (1, -3.9) {14};
+    \node[font=\scriptsize, text=MedGray] at (3, -3.9) {15};
+    
+    % Arrows
+    \draw[arrow, AccentRed] (v0.south) -- (v1a.north);
+    \draw[arrow, AccentRed] (v0.south) -- (v1b.north);
+    \draw[arrow, AccentRed] (v1a.south) -- (v2a.north);
+    \draw[arrow, AccentRed] (v1a.south) -- (v2b.north);
+    \draw[arrow, AccentRed] (v1b.south) -- (v2c.north);
+    \draw[arrow, AccentRed] (v1b.south) -- (v2d.north);
+    
+    % Count annotation
+    \node[lbl, font=\small, align=center] at (6, -1.5) 
+      {$2^0 = 1$ copy\\$2^1 = 2$ copies\\$2^2 = 4$ copies\\
+       $\vdots$\\$2^d$ copies after\\$d$ expansions};
+  \end{tikzpicture}
+  \caption{Void duplicates grow exponentially: each expansion doubles 
+           every existing copy. However, the table also doubles, so 
+           the \emph{fraction} of void entries remains constant per 
+           generation.}
+  \label{fig:void-tree}
+\end{figure}
+
+\subsection{Why Duplication Is Correct}
+
+A void entry has zero fingerprint bits. When a query encounters a 
+void entry in its target run, the comparison is vacuously true: 
+there are no bits to disagree on. Therefore, a void entry matches 
+\emph{any} query to its slot. This property ensures correctness in 
+two ways:
+
+\begin{enumerate}
+  \item \textbf{No false negatives:} The original element's hash 
+        determines exactly one of the two candidate slots. Since the 
+        void entry occupies \emph{both}, it is guaranteed to be found 
+        regardless of which slot the query reaches.
+  \item \textbf{False positives are bounded:} A void entry in the 
+        ``wrong'' slot may cause additional false positives. However, 
+        since the void entry would have matched any query anyway (zero 
+        bits to compare), the extra copy does not change the per-query 
+        false positive probability. It only affects which queries 
+        encounter it.
+\end{enumerate}
+
+\subsection{How Queries Find Void Entries}
+
+It is important to understand why duplication guarantees that a query 
+always finds the right slot despite the entry being void. At query 
+time, the caller has access to the original key and can hash it fresh. 
+The hash function produces a full output (e.g., 64 bits), regardless 
+of how many bits the filter stored internally. The query computes 
+$\log_2(\text{table size})$ bits for the quotient and goes directly 
+to that one canonical slot. The query never needs to ``search'' 
+across all the duplicates; it knows exactly where to look because it 
+has the full hash.
+
+The duplication exists for a different reason: during \emph{expansion}, 
+the filter does not have the original key. It only has the stored 
+fingerprint. When that fingerprint is empty (void), the filter cannot 
+decide which child slot the entry belongs to, so it places the entry 
+in both. This ensures that whichever slot the full hash eventually 
+resolves to at query time, a void entry will be waiting there.
+
+\subsection{Why Duplication Doesn't Explode}
+
+The exponential growth of void copies (Figure~\ref{fig:void-tree}) 
+appears alarming. However, two exponential effects work against each 
+other and cancel exactly.
+
+Older generations (entries inserted long ago) need the \emph{most} 
+duplicates per entry, because they have been void through many 
+expansions. But older generations also contributed the \emph{fewest} 
+entries, because the table was much smaller when they were inserted. 
+Conversely, recently void generations contributed many entries but 
+need very few duplicates (perhaps just one). These two effects, 
+the exponential growth in duplicates and the exponential shrinkage 
+in generation size, offset each other precisely.
+
+To derive this formally, consider the table starting at size $C_0$. 
+Each generation doubles the table, so Generation $j$ sees a table 
+of size $C_0 \cdot 2^j$ and Generation $X$ (the current one) sees 
+size $C_0 \cdot 2^X$. Generation $j$ added roughly half the table's 
+entries at the time of its expansion. The number of new entries 
+contributed by Generation $j$ is approximately $C_0 \cdot 2^{j-1}$ 
+(the difference between the table size at Generation $j$ and 
+Generation $j-1$). The fraction of total entries that came from 
+Generation $j$ is therefore:
+\[
+  f(j) = \frac{C_0 \cdot 2^{j-1}}{C_0 \cdot 2^X} = 2^{-X+j-1}
+\]
+as shown in Equation 1 from \cite{aleph}.
+
+An entry from Generation $j$ has survived $X - j$ expansions. Each 
+expansion consumes one fingerprint bit for the expanded quotient. 
+The entry becomes void when all $F$ fingerprint bits are consumed, 
+which occurs when $X - j \geq F$. After that point, the entry has 
+been void for $(X - j) - F$ additional expansions. During each of 
+those additional expansions, the void entry is duplicated into both 
+child slots, doubling the number of copies. The total number of 
+duplicates per void entry is therefore $2^{X - j - F}$.
+
+The fraction of slots occupied by void duplicates from Generation 
+$j$ is the product of how many entries Generation $j$ contributed 
+and how many duplicates each entry has:
+\begin{equation}
+  \alpha \cdot f(j) \cdot 2^{X-j-F} 
+  = \alpha \cdot 2^{-X+j-1} \cdot 2^{X-j-F} 
+  = \alpha \cdot 2^{-F-1}
+  \label{eq:void-fraction}
+\end{equation}
+
+The $(X - j)$ terms cancel completely. Every void generation, 
+regardless of age, contributes exactly the same fraction of the 
+table: $\alpha \cdot 2^{-F-1}$. This is the key insight. The 
+entries requiring the most duplication are exponentially rare, and 
+that exponential rarity perfectly offsets the exponential duplication.
+
+The total fraction of void entries is then this constant multiplied 
+by the number of void generations. A generation is void when 
+$X - j \geq F$, so $j$ ranges from $0$ to $X - F$, giving 
+$X - F + 1$ void generations:
+\begin{equation}
+  \gamma(X) = \alpha \cdot 2^{-F-1} \cdot (X - F + 1)
+  \label{eq:total-void-fraction}
+\end{equation}
+
+This grows only \emph{linearly} with $X$ (the number of expansions), 
+and $2^{-F-1}$ is extremely small for any reasonable fingerprint 
+length. A factor of $2^{-F-1}$ with $F = 10$ means each void 
+generation contributes only $1/2048$ of the table.
+
+\begin{examplebox}[Void Fraction in Practice]
+With $F = 10$ (initial fingerprint length) and $X = 20$ (number of 
+expansions), the total void fraction is:
+\[
+  \gamma(20) = 0.8 \cdot 2^{-11} \cdot (20 - 10 + 1) 
+  = 0.8 \cdot \frac{11}{2048} \approx 0.43\%
+\]
+Less than half a percent of the table is occupied by void duplicates 
+after 20 expansions. The table can hold over a million entries at 
+this point, so the overhead is negligible.
+\end{examplebox}
+
+
+% ============================================================================
+\section{Constant-Time Queries}
+\label{sec:constant-queries}
+% ============================================================================
+
+With void duplication in place, we can now see why queries are 
+$\bigO{1}$. The key consequence is that \textbf{all entries, 
+including void entries, reside in a single main hash table}. This 
+eliminates the need to search secondary tables during queries.
+
+\textbf{Query algorithm.} To query for element $x$:
+\begin{enumerate}
+  \item Compute the full hash $h(x)$ using the hash function. This 
+        produces a full-length output (e.g., 64 bits), regardless of 
+        how many bits are stored internally.
+  \item Extract the quotient $q$ (the bottom $\log_2(\text{table 
+        size})$ bits) and the remainder $r$ (the next $F$ bits).
+  \item Go to canonical slot $q$ in the main hash table.
+  \item If the slot is empty or no matching entry exists in the run, 
+        return \textsc{no} (definitely not in the set).
+  \item If a matching fingerprint is found, return \textsc{yes} 
+        (probably in the set). If a void entry is found in the run, 
+        also return \textsc{yes}, since a void entry has zero bits to 
+        compare against and therefore matches any query trivially.
+\end{enumerate}
+
+Every query accesses only the main hash table and terminates in 
+$\bigO{1}$ time. Compare this to InfiniFilter, where a query for 
+a non-existing or old key must traverse up to 
+$\bigO{\log(N)/F}$ hash tables in the Fixed-Width Regime 
+\cite{infinifilter}.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[scale=0.9, every node/.style={transform shape}]
+    % InfiniFilter query path
+    \node[lbl, font=\bfseries] at (-3, 1) {InfiniFilter query:};
+    
+    \node[slot, minimum width=1.8cm, fill=BitOne] (m1) at (-3, 0) 
+      {\scriptsize main};
+    \node[slot, minimum width=1.4cm, fill=orange!10] (s1) at (-3, -1.2) 
+      {\scriptsize secondary};
+    \node[slot, minimum width=1cm, fill=red!10] (a1) at (-3, -2.4) 
+      {\scriptsize aux.};
+    
+    \draw[arrow, AccentRed] (m1.south) -- (s1.north) 
+      node[midway, right, font=\scriptsize] {miss};
+    \draw[arrow, AccentRed] (s1.south) -- (a1.north) 
+      node[midway, right, font=\scriptsize] {miss};
+    \node[lbl, text=AccentRed, font=\scriptsize] at (-3, -3.2) 
+      {$\bigO{\log N}$ tables};
+    
+    % Aleph query path
+    \node[lbl, font=\bfseries] at (3, 1) {Aleph Filter query:};
+    
+    \node[slot, minimum width=1.8cm, fill=BitOne] (m2) at (3, 0) 
+      {\scriptsize main (has everything)};
+    
+    \draw[arrow, AccentGreen, very thick] (3, 0.8) -- (m2.north);
+    \node[lbl, text=AccentGreen, font=\scriptsize] at (3, -1) 
+      {$\bigO{1}$ always};
+    
+    \node[slot, minimum width=1.4cm, fill=gray!5] (s2) at (3, -2) 
+      {\scriptsize secondary};
+    \node[font=\scriptsize, text=MedGray, align=center] at (3, -2.8) 
+      {only for deletes,\\never for queries};
+  \end{tikzpicture}
+  \caption{InfiniFilter queries may traverse multiple tables; Aleph 
+           Filter queries always access only the main table.}
+  \label{fig:query-comparison}
+\end{figure}
+
+
+% ============================================================================
+\section{Tombstone-Based Deletes}
+\label{sec:tombstone-deletes}
+% ============================================================================
+
+Void duplication solves the query problem, but it introduces a 
+complication for deletes. When a void entry is deleted, \emph{all of 
+its duplicates} must also be removed to prevent the filter from 
+returning false positives for the deleted key. A void entry may 
+have $2^{k-b}$ duplicates (where $k = \log_2(\text{table size})$ and 
+$b$ is the length of its mother hash from 
+Section~\ref{sec:mother-hash}), and removing them all immediately 
+could be expensive \cite{aleph}.
+
+The Aleph Filter addresses this with a \textbf{two-phase lazy 
+deletion} scheme.
+
+\subsection{Phase 1: Immediate Tombstone ($\bigO{1}$)}
+
+When deleting a key whose only matching entry in the target run is a 
+void entry:
+
+\begin{enumerate}
+  \item Replace the void entry at the canonical slot with a 
+        \textbf{tombstone}: a special bit pattern of all 1s 
+        (Figure~\ref{fig:slot-format}).
+  \item Add the canonical slot address to a \textbf{deletion queue} 
+        (an append-only array).
+\end{enumerate}
+
+The tombstone ensures that subsequent queries for the deleted key 
+return \textsc{no}, providing immediate correctness. Since the void 
+entry previously matched everything at that slot (zero fingerprint 
+bits means vacuously matching any query), the tombstone replaces that 
+blanket ``yes'' with a definitive ``no.'' This phase takes $\bigO{1}$ 
+time.
+
+\subsection{Using the Mother Hash for Duplicate Removal}
+
+Recall from Section~\ref{sec:mother-hash} that the mother hash is the 
+accumulated slot address of a void entry, containing all the hash 
+bits ever stored for it. The mother hash is stored in a 
+\textbf{secondary hash table}, which is itself a smaller quotient 
+filter. Because the secondary table has fewer slots, it requires 
+fewer quotient bits, so the mother hash can be split into a short 
+quotient and a long fingerprint. This means the entry that was void 
+in the main table (zero fingerprint bits) has a meaningful fingerprint 
+again in the secondary table.
+
+\subsection{Phase 2: Deferred Duplicate Removal}
+
+Right before the next expansion, the Aleph Filter processes the 
+deletion queue:
+
+\begin{enumerate}
+  \item Pop a canonical slot address from the queue.
+  \item Look up the address in the \textbf{secondary hash table} to 
+        find the void entry's mother hash.
+  \item From the mother hash, compute the locations of all void 
+        duplicates. If the mother hash is $b$ bits and the table has 
+        $2^k$ slots, then the entry has $2^{k-b}$ duplicates. Their 
+        slot addresses share the mother hash as the bottom $b$ bits, 
+        with all $2^{k-b}$ permutations of the remaining upper bits:
+        \[
+          \text{duplicate slots} = \{s \in \{0, \dots, 2^k - 1\} 
+          : s \mod 2^b = \text{mother hash}\}
+        \]
+        The mother hash forms the lower bits of each duplicate's slot 
+        address. The upper bits cycle through every possibility, since 
+        those are precisely the bits the filter had no information 
+        about (the bits beyond the void threshold).
+  \item Remove a void entry from each of these canonical slots.
+  \item Remove the mother hash from the secondary hash table.
+\end{enumerate}
+
+\begin{examplebox}[Deletion Walkthrough (from \cite{aleph}, Figure 9)]
+Delete Key $X$ with $h(X) = 001101$. The main table has $2^3 = 8$ 
+slots.
+
+\textbf{Phase 1:}
+\begin{enumerate}
+  \item Find Key $X$'s canonical slot: 101 (from the bottom 3 bits of 
+        the hash, i.e.\ the quotient).
+  \item The only matching entry is a void entry. Replace it with a 
+        tombstone.
+  \item Add ``101'' to the deletion queue.
+\end{enumerate}
+
+\textbf{Phase 2} (before next expansion):
+\begin{enumerate}
+  \item Pop ``101'' from the queue.
+  \item Search the secondary hash table for the longest matching 
+        mother hash. Find entry at Slot 1 with fingerprint 0. 
+        Concatenate: longest matching mother hash $= 01$ ($b = 2$ bits).
+  \item Table has $2^3 = 8$ slots ($k = 3$). Number of duplicates: 
+        $2^{3-2} = 2$.
+  \item Duplicate locations: bottom 2 bits $= 01$, permute the top 
+        bit: slots $\texttt{001}$ and $\texttt{101}$.
+  \item Remove a void entry from each slot. Remove the mother hash 
+        from the secondary table.
+\end{enumerate}
+\end{examplebox}
+
+\subsection{Why Delete the Longest Matching Mother Hash?}
+
+When multiple void entries share the same canonical slot, there may 
+be multiple matching mother hashes of different lengths in the 
+secondary table. The Aleph Filter always removes the entry with the 
+\textbf{longest matching mother hash} (i.e., the fewest duplicates) 
+\cite{aleph}.
+
+To see why, consider two void entries $X$ and $Y$ that share a 
+canonical slot. $X$ is older, so its mother hash is shorter (say 2 
+bits) and it has 8 duplicates. $Y$ is newer, so its mother hash is 
+longer (say 4 bits) and it has only 2 duplicates. $Y$'s duplicate 
+slots are a \emph{subset} of $X$'s duplicate slots, because $Y$'s 
+mother hash is a more specific prefix that narrows down to fewer 
+locations.
+
+If we were to delete the shorter mother hash ($X$'s), we would 
+remove void entries from all 8 of $X$'s slots. But $Y$ only has 
+duplicates at 2 of those 8 slots. The other 6 slots that we just 
+cleared contained void entries that $Y$'s queries might need. A 
+future query for $Y$ could land on one of the 6 slots that no longer 
+has a void entry and return a false negative, which filters must 
+never produce.
+
+By removing the longest matching mother hash ($Y$'s, with fewer 
+duplicates), we only remove 2 void entries. $X$'s 8 duplicates 
+remain intact. Since $Y$'s slots were a subset of $X$'s, every 
+slot that $Y$ occupied is still covered by $X$. No false negatives 
+are possible.
+
+The rule is: remove the entry with the most specific (longest) mother 
+hash first, because it disturbs the fewest slots and the remaining 
+entry's broader set of duplicates continues to cover everything.
+
+\subsection{Computational Cost}
+
+The tombstone placement and queue insertion in Phase 1 take $\bigO{1}$.
+The duplicate removal in Phase 2 is deferred to the next expansion. 
+The cost of Phase 2 is spread across all the insertions that triggered 
+the expansion. Formally, the total number of void duplicates in the 
+Fixed-Width Regime is at most $\bigO{2^{-F} \cdot X \cdot N}$ 
+(Section 4.2 of \cite{aleph}). Since this work is performed after $N$ 
+insertions, the amortized cost per insertion is sub-constant as long 
+as $X < 2^F$, which is the maximum number of supported expansions. 
+
+To understand what ``amortized $\bigO{1}$'' means here: most 
+individual deletions are cheap (just place a tombstone). Occasionally, 
+the deferred Phase 2 cleanup during an expansion is more expensive. 
+But when that rare expensive cost is averaged across all the cheap 
+operations leading up to it, the average per-operation cost remains 
+$\bigO{1}$.
+
+
+% ============================================================================
+\section{Rejuvenation}
+\label{sec:rejuvenation}
+% ============================================================================
+
+The tombstone mechanism handles deletes. The third and final 
+mechanism, \textbf{rejuvenation}, handles a complementary problem: 
+keeping the FPR low over time by refreshing old entries.
+
+When a query returns a \emph{true positive} (the queried key actually 
+exists in the underlying data set), the application typically fetches 
+the full key from storage. At this point, the Aleph Filter can 
+\textbf{rejuvenate} the entry: rehash the full key to obtain a fresh, 
+full-length fingerprint and replace the short or void entry with this 
+new fingerprint \cite{aleph}.
+
+Rejuvenation reduces the FPR by replacing entries that contribute 
+high false positive probabilities (short or void fingerprints) with 
+entries that contribute low probabilities (full-length fingerprints). 
+In essence, the entry is ``reborn'' with a fresh $F$-bit fingerprint 
+as if it had just been inserted, undoing all the damage caused by 
+successive expansions.
+
+\subsection{Rejuvenation Procedure}
+
+When a query finds that the only matching entry in the target run is 
+a void entry, and the query is a true positive:
+
+\begin{enumerate}
+  \item \textbf{Immediate:} Replace the void entry at the canonical 
+        slot with the fresh full-length fingerprint computed from the 
+        fetched key. Add the canonical slot address to a 
+        \textbf{rejuvenation queue}.
+  \item \textbf{Deferred:} Before the next expansion, pop addresses 
+        from the rejuvenation queue. For each, look up the longest 
+        matching mother hash in the secondary hash table, compute the 
+        locations of all void duplicates, and remove them. This is 
+        identical to the delete procedure 
+        (Section~\ref{sec:tombstone-deletes}), except the void entry 
+        at the queried key's canonical slot has already been replaced 
+        with a real fingerprint rather than a tombstone.
+\end{enumerate}
+
+\begin{examplebox}[Rejuvenation Walkthrough (from \cite{aleph}, Figure 11)]
+Rejuvenate Key $X$ with $h(X) = 001100$. Main table has $2^3 = 8$ 
+slots.
+
+\begin{enumerate}
+  \item Query finds void entry at canonical slot 100.
+  \item Application fetches Key $X$ from storage (true positive).
+  \item Rehash Key $X$ to get a fresh fingerprint. Replace the void 
+        entry at slot 100 with fingerprint \texttt{0001}.
+  \item Add ``100'' to the rejuvenation queue.
+  \item Before next expansion: look up ``100'' in the secondary table. 
+        Find longest matching mother hash $= 00$ ($b = 2$ bits). 
+        Duplicates are at slots $\texttt{000}$ and $\texttt{100}$.
+  \item Since slot 100 was already rejuvenated (it now has a real 
+        fingerprint), only the duplicate at slot $\texttt{000}$ needs 
+        to be removed.
+  \item Remove the mother hash from the secondary table.
+\end{enumerate}
+\end{examplebox}
+
+Rejuvenation is only effective when queries target older entries 
+(those with short or void fingerprints). In workloads that 
+predominantly query recent entries, rejuvenation has little 
+opportunity to help. The Widening and Predictive Regimes 
+(Section~\ref{sec:regimes}) provide complementary mechanisms that 
+scale the FPR without relying on the query workload.
+
+
+% ============================================================================
+\section{FPR Analysis}
+\label{sec:fpr-analysis}
+% ============================================================================
+
+With all three mechanisms in place (void duplication, tombstones, and 
+rejuvenation), we can now analyze the false positive rate. The key 
+result is that \textbf{every generation contributes equally to the 
+FPR}, whether its entries are void or not \cite{aleph}.
+
+\subsection{Per-Generation FPR}
+
+Let $f(j) \approx 2^{-X+j-1}$ denote the fraction of entries from 
+Generation $j$, where $X$ is the current generation.
+
+\textbf{Non-void entries} (Generation $j$ where $X - j < F$): These 
+entries have fingerprints of $F - (X - j)$ bits remaining. Each 
+expansion steals one fingerprint bit, so the collision probability 
+doubles (the fingerprint halves in distinguishing power). But the 
+generation's share of the table also halves with each expansion. 
+These two effects cancel:
+\[
+  \alpha \cdot f(j) \cdot 2^{-F+(X-j)} = \alpha \cdot 2^{-F-1}
+\]
+
+\textbf{Void entries} (Generation $j$ where $X - j \geq F$): These 
+entries match any query with probability 1 (zero fingerprint bits 
+means no basis for rejection). However, their duplication keeps 
+their fraction constant. The generation's small size and large 
+duplicate count cancel as shown in 
+Equation~\ref{eq:void-fraction}:
+\[
+  \alpha \cdot f(j) \cdot 2^{X-j-F} \cdot 1 = \alpha \cdot 2^{-F-1}
+\]
+
+The same value in both cases. For non-void entries, fingerprint 
+shrinkage increases collision probability but the generation is 
+proportionally smaller. For void entries, the match probability is 1 
+but the duplication count and generation size cancel to the same 
+constant. Every generation, void or not, contributes exactly 
+$\alpha \cdot 2^{-F-1}$ to the FPR.
+
+\subsection{Total FPR}
+
+Summing across all $X + 1$ generations (indexed $0$ through $X$) 
+plus the current generation:
+
+\begin{equation}
+  \text{FPR} \approx \sum_{j=0}^{X+1} \alpha \cdot 2^{-F-1} 
+  \lesssim \alpha \cdot (\log_2(N) + 2) \cdot 2^{-F-1}
+  \label{eq:aleph-fpr-fixed}
+\end{equation}
+
+This matches InfiniFilter's FPR in the Fixed-Width Regime 
+(Equation 2 from \cite{aleph}). The Aleph Filter does not increase 
+the FPR by duplicating void entries. It merely changes \emph{where} 
+they are stored, not how many effective false positives they produce.
+
+\subsection{Widening Regime}
+
+In the Widening Regime, entries in Generation $j$ are assigned 
+fingerprints of $\ell(j) = F + 2 \cdot \log_2(j + 1)$ bits. The 
+extra bits compensate for the longer lifetime these entries will 
+have, since they will survive more expansions and lose more bits. 
+The FPR converges using the Basel series identity 
+$\sum_{j=1}^{\infty} j^{-2} = \pi^2/6$:
+
+\begin{equation}
+  \text{FPR} \approx \alpha \cdot 2^{-F-1} \cdot 
+  \sum_{j=0}^{\infty} \frac{1}{(j+1)^2} 
+  \lesssim \alpha \cdot 2^{-F-1} \cdot \frac{\pi^2}{6} 
+  \lesssim \alpha \cdot 2^{-F}
+  \label{eq:aleph-fpr-widening}
+\end{equation}
+
+The FPR converges to a constant $\bigO{2^{-F}}$, independent of how 
+much the data grows. This is achieved at the cost of $F + \bigO{\log 
+\log N}$ bits per entry \cite{aleph}.
+
+
+% ============================================================================
+\section{Operating Regimes}
+\label{sec:regimes}
+% ============================================================================
+
+The Aleph Filter supports three operating regimes, each offering a 
+different tradeoff between FPR, memory, and maximum expansions:
+
+\begin{table}[H]
+  \centering
+  \caption{Aleph Filter operating regimes \cite{aleph}. $N$ is the data 
+           size relative to initial capacity, $F$ is the initial 
+           fingerprint length, and $N_{est}$ is the estimated final 
+           data size.}
+  \label{tab:regimes}
+  \begin{tabular}{l c c c}
+    \hline
+    \textbf{Regime} & \textbf{FPR} & \textbf{Bits/entry} & 
+    \textbf{Max expansions} \\
+    \hline
+    Fixed-Width & $\bigO{2^{-F} \cdot \log N}$ & $F$ & $2^F$ \\
+    Widening & $\bigO{2^{-F}}$ & $F + \bigO{\log \log N}$ & $\infty$ \\
+    Predictive & $\bigO{2^{-F}}$ & $F + \bigO{\log|\log(N/N_{est})|}$ 
+    & $\infty$ \\
+    \hline
+  \end{tabular}
+\end{table}
+
+The \textbf{Predictive Regime} is a novel contribution of the Aleph 
+Filter paper \cite{aleph}. Given an estimate $N_{est}$ of how much the 
+data will grow, it assigns \emph{longer} fingerprints initially and 
+\emph{shorter} ones as the data approaches the estimate. When the 
+data size reaches $N_{est}$, all fingerprints have shrunk to exactly 
+$F$ bits, achieving an FPR vs.\ memory tradeoff on par with static 
+filters.
+
+If the data exceeds the estimate, the Predictive Regime transitions 
+to Widening Regime behavior, assigning increasingly longer 
+fingerprints. The memory cost is $F + \bigO{\log|\log(N/N_{est})|}$, 
+which is significantly better than the Widening Regime's 
+$F + \bigO{\log \log N}$ when $N \approx N_{est}$.
+
+
+% ============================================================================
+\section{Architecture Summary}
+% ============================================================================
+
+The complete Aleph Filter architecture consists of:
+
+% ---- Diagram: Architecture ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    % Main table
+    \node[draw, rounded corners, fill=BitOne, minimum width=7cm, 
+          minimum height=1.5cm] (main) at (0, 0) {};
+    \node[font=\bfseries] at (0, 0.3) {Main Hash Table};
+    \node[font=\scriptsize, align=center] at (0, -0.2) 
+      {Normal entries + void duplicates + tombstones\\
+       \textbf{All queries go here only}};
+    
+    % Secondary table
+    \node[draw, rounded corners, fill=orange!10, minimum width=4.8cm, 
+          minimum height=2.0cm] (sec) at (0, -2.3) {};
+    \node[font=\bfseries, font=\small] at (0, -2.0) {Secondary Hash Table};
+    \node[font=\scriptsize, align=center] at (0, -2.6) 
+      {Mother hashes of void entries\\
+       For deletes and rejuvenation only};
+    
+    % Auxiliary tables
+    \node[draw, rounded corners, fill=red!8, minimum width=4cm, 
+          minimum height=1.3cm] (aux) at (0, -4.4) {};
+    \node[font=\bfseries, font=\small] at (0, -4.4) {Auxiliary Tables};
+    \node[font=\scriptsize] at (0, -4.70) {Chain of older sealed tables};
+    
+    % Queues
+    \node[draw, rounded corners, fill=AccentTeal!10, minimum width=2.8cm, 
+          minimum height=0.7cm] (dq) at (5.5, -1.2) {};
+    \node[font=\scriptsize] at (5.5, -1.2) {Deletion Queue};
+    
+    \node[draw, rounded corners, fill=AccentGreen!10, minimum width=2.8cm, 
+          minimum height=0.7cm] (rq) at (5.5, -3.2) {};
+    \node[font=\scriptsize] at (5.5, -3.2) {Rejuvenation Queue};
+    
+    % Arrows
+    \draw[arrow] (main.south) -- (sec.north) 
+      node[midway, right=4pt, font=\scriptsize] 
+      {void mother hashes};
+    \draw[arrow] (sec.south) -- (aux.north) 
+      node[midway, right=4pt, font=\scriptsize] {when full};
+    \draw[arrow] (main.east) -- (dq.west) 
+      node[midway, above, right=2pt, yshift=7pt, font=\scriptsize] {delete};
+    \draw[arrow] (main.east) -- (rq.west) 
+      node[midway, below, xshift=30pt, yshift=-20pt, font=\scriptsize] {rejuvenate};
+    \draw[dasharrow, AccentRed] (dq.south) -- (sec.east) 
+      node[midway, right=10pt, yshift=-4pt, font=\scriptsize, align=left] 
+      {before next expansion};
+    \draw[dasharrow, AccentRed] (rq.west) -- (sec.east);
+    
+    % Query label
+    \node[hashbox] (q) at (-5.5, 0) {query $x$};
+    \draw[arrow, AccentGreen, very thick] (q.east) -- (main.west)
+      node[midway, above, font=\scriptsize, text=AccentGreen] 
+      {$\bigO{1}$};
+  \end{tikzpicture}
+  \caption{Aleph Filter architecture. Queries access only the main 
+           table. The secondary and auxiliary tables store mother hashes 
+           for delete and rejuvenation operations. Queues defer 
+           duplicate removal to the next expansion.}
+  \label{fig:architecture}
+\end{figure}
+
+
+% ============================================================================
+\section{Comparison}
+% ============================================================================
+
+\begin{table}[H]
+  \centering
+  \caption{Complete comparison of filter expansion techniques. The 
+           Aleph Filter is the first to achieve $\bigO{1}$ for all 
+           operations while supporting infinite expansion with a 
+           stable FPR \cite{aleph}.}
+  \label{tab:full-comparison}
+  \begin{tabular}{l c c c c c}
+    \hline
+    & \textbf{Query} & \textbf{Delete} & \textbf{Expand} 
+    & \textbf{Stable FPR} & \textbf{Insert} \\
+    \hline
+    Bloom \cite{bloom}
+    & $\bigO{k}$ & \texttimes & \texttimes & \texttimes & $\bigO{k}$ \\
+    Cuckoo \cite{cuckoo}
+    & $\bigO{1}$ & \checkmark & \texttimes & \texttimes & $\bigO{1}$* \\
+    Quotient \cite{quotient}
+    & $\bigO{1}$* & \checkmark & \checkmark & \texttimes & $\bigO{1}$* \\
+    InfiniFilter \cite{infinifilter}
+    & $\bigO{\log N}$ & \checkmark & \checkmark & \checkmark & $\bigO{1}$ \\
+    \textbf{Aleph Filter} \cite{aleph}
+    & $\bigO{1}$ & \checkmark & \checkmark & \checkmark & $\bigO{1}$ \\
+    \hline
+  \end{tabular}
+  
+  \smallskip
+  {\small * = amortized, meaning individual operations are usually 
+  $\bigO{1}$ but rare expensive operations (eviction chains or 
+  run shifts) bring the average to $\bigO{1}$ when spread across 
+  many operations. Performance degrades at high load factors.}
+\end{table}
+
+Each row in Table~\ref{tab:full-comparison} solves a limitation of 
+the row above it: Bloom filters cannot delete, cuckoo filters cannot 
+expand, quotient filters cannot maintain a stable FPR, and 
+InfiniFilter's queries degrade as data grows. The Aleph Filter 
+achieves all properties simultaneously: constant-time operations 
+that remain stable no matter how much the data grows.

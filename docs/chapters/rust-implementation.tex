@@ -1,0 +1,332 @@
+\chapter{Rust Implementation}
+
+This chapter walks through our Rust implementation of the Aleph Filter. We begin with the core data structures, then explain each operation and how it maps to the algorithms described in the previous chapters. Finally, we compare our implementation against the official Java reference to clarify what matches and what was intentionally simplified.
+
+\section{Data Structures}
+
+The filter is built on three core types: a \texttt{Slot} for storing fingerprints, a \texttt{SlotMetadata} for tracking the three quotient filter flags, and the \texttt{AlephFilter} struct that ties everything together.
+
+\begin{lstlisting}[caption={The main AlephFilter struct}]
+pub struct AlephFilter {
+    slots: Vec<Slot>,             // fingerprint storage
+    metadata: Vec<SlotMetadata>,  // per-slot O/C/S flags
+    num_slots: usize,             // logical slots (power of 2)
+    num_extension_slots: usize,   // overflow buffer
+    quotient_bits: u32,           // log2(num_slots)
+    base_fp_bits: u32,            // fingerprint width at creation
+    num_expansions: usize,        // times we have doubled
+    num_items: usize,             // items currently stored
+    max_load_factor: f64,         // expansion threshold (0.8)
+}
+\end{lstlisting}
+
+Each \texttt{Slot} packs a fingerprint value and its bit-length into a single 64-bit integer: the lower 56 bits hold the fingerprint, and the upper 8 bits hold the length. Two special sentinel values are reserved: a \texttt{Void} marker for exhausted fingerprints, and a \texttt{Tombstone} marker for deleted void entries.
+
+Each \texttt{SlotMetadata} is a single byte with three bit-flags:
+\begin{itemize}
+    \item \textbf{Occupied} (bit 0): this canonical slot has a run associated with it.
+    \item \textbf{Continuation} (bit 1): this slot continues a run that started earlier.
+    \item \textbf{Shifted} (bit 2): this slot's data was displaced from its canonical position.
+\end{itemize}
+
+These three flags are exactly the standard quotient filter metadata described in Chapter~2. Together, they allow us to locate any element's run in $O(1)$ expected time by walking backward to find the cluster start and then forward to find the target run.
+
+% ============================================================================
+\section{Operations}
+% ============================================================================
+
+With the data structures in place, we now describe each operation and how it maps to the algorithms from the previous chapters.
+
+% Subsection
+\subsection{Insertion}
+
+Insertion in our Rust code is split into a public API step (hash split + slot construction) and an internal quotient-filter step (new run vs existing run).
+
+\begin{lstlisting}[caption={Insertion path in our Rust implementation}]
+pub fn insert(&mut self, key: &[u8]) {
+  if self.load_factor() >= self.max_load_factor {
+    self.expand();
+  }
+  let hash = hash_key(key);
+  let r = self.fp_bits();
+  let (slot_idx, fp) = split_hash(hash, self.quotient_bits, r);
+  let canonical = slot_idx as usize;
+  let slot = if r == 0 { Slot::void_marker() } else { Slot::new(fp, r as u8) };
+  self.qf_insert_slot(canonical, slot);
+  self.num_items += 1;
+}
+
+fn qf_insert_slot(&mut self, canonical: usize, slot: Slot) -> bool {
+  let does_run_exist = self.metadata[canonical].is_occupied();
+  if !does_run_exist {
+    return self.insert_new_run(canonical, slot);
+  } else {
+    let run_start = self.find_run_start(canonical);
+    return self.insert_into_run(slot, run_start);
+  }
+}
+\end{lstlisting}
+
+This matches the quotient-filter model: split into quotient/remainder, then either create a new run or append into an existing run while preserving \texttt{occupied}, \texttt{continuation}, and \texttt{shifted} metadata.
+
+% Subsection
+\subsection{Query}
+
+Query logic in the implementation is also two-stage: compute hash parts in \texttt{contains}, then run-local matching in \texttt{qf\_search}/\texttt{find\_in\_run}.
+
+\begin{lstlisting}[caption={Query path in our Rust implementation}]
+pub fn contains(&self, key: &[u8]) -> bool {
+  let hash = hash_key(key);
+  let r = self.fp_bits();
+  let (slot_idx, fp) = split_hash(hash, self.quotient_bits, r);
+  let canonical = slot_idx as usize;
+  return self.qf_search(fp, canonical);
+}
+
+fn qf_search(&self, fp: u64, canonical: usize) -> bool {
+  if !self.metadata[canonical].is_occupied() {
+    return false;
+  }
+  let run_start = self.find_run_start(canonical);
+  return self.find_in_run(run_start, fp);
+}
+
+fn find_in_run(&self, start: usize, fp: u64) -> bool {
+  let mut pos = start;
+  let r = self.fp_bits();
+  loop {
+    if self.slots[pos].is_tombstone() {
+      // skip tombstones
+    } else if self.slots[pos].matches(fp, r as u8) {
+      return true;
+    }
+    pos += 1;
+    if pos >= self.total_slots() || !self.metadata[pos].is_continuation() {
+      break;
+    }
+  }
+  return false;
+}
+\end{lstlisting}
+
+Behavioral detail: tombstones are skipped, void entries can still match, and comparison uses the current effective fingerprint width.
+
+% Subsection
+\subsection{Expansion}
+
+The Rust implementation expands by iterating existing entries, doubling the table, then reinserting with pivot-bit routing. Void entries are duplicated to both candidate buckets.
+
+\begin{lstlisting}[caption={Expansion core in our Rust implementation}]
+fn expand(&mut self) {
+  let entries = self.iterate_entries();
+  let old_q_bits = self.quotient_bits;
+
+  self.num_slots *= 2;
+  self.quotient_bits += 1;
+  self.num_expansions += 1;
+  self.num_extension_slots += 2;
+  self.slots = vec![Slot::empty(); self.total_slots()];
+  self.metadata = vec![SlotMetadata::new(); self.total_slots()];
+  self.num_items = 0;
+
+  let mut void_slots: std::collections::HashSet<usize> = std::collections::HashSet::new();
+
+  for (bucket, fingerprint, fp_len, is_void, _old_pos) in entries {
+    if is_void {
+      let s0 = bucket;
+      let s1 = bucket | (1 << old_q_bits);
+      if s0 < self.num_slots && void_slots.insert(s0) {
+        self.qf_insert_slot(s0, Slot::void_marker());
+        self.num_items += 1;
+      }
+      if s1 < self.num_slots && void_slots.insert(s1) {
+        self.qf_insert_slot(s1, Slot::void_marker());
+        self.num_items += 1;
+      }
+    } else if fp_len > 0 {
+      let pivot = fingerprint & 1;
+      let new_bucket = bucket | ((pivot as usize) << old_q_bits);
+      let new_fp = fingerprint >> 1;
+      let new_len = fp_len - 1;
+      let slot = if new_len == 0 { Slot::void_marker() } else { Slot::new(new_fp, new_len) };
+      self.qf_insert_slot(new_bucket, slot);
+      self.num_items += 1;
+    }
+  }
+}
+\end{lstlisting}
+
+This is the key Aleph behavior in code: one bit is sacrificed per expansion for normal entries, while void entries are duplicated to preserve no-false-negatives lookup behavior.
+
+\subsubsection{Void Entries}
+
+After enough expansions, some entries exhaust all their fingerprint bits ($r = 0$). These become \textit{void entries} as they have no bits left to pivot on, so we cannot determine which half of the expanded table they belong to. The Aleph Filter's solution is to \textbf{duplicate} the void entry into \textit{both} possible new slots:
+
+\begin{align}
+    s_0 &= b \\
+    s_1 &= b \lor (1 \ll q)
+\end{align}
+
+This duplication ensures that queries to either new bucket will find the void marker and return \texttt{true}, preserving the no-false-negatives guarantee. The cost is a small amount of space redundancy, but it avoids the $O(\log N)$ secondary table lookups that InfiniFilter requires.
+
+% Subsection
+\subsection{Deletion}
+
+Deletion uses full cluster-aware compaction for normal entries, and a tombstone fast path for void entries.
+
+\begin{lstlisting}[caption={Deletion path in our Rust implementation}]
+pub fn delete(&mut self, key: &[u8]) -> bool {
+  let hash = hash_key(key);
+  let r = self.fp_bits();
+  let (slot_idx, fp) = split_hash(hash, self.quotient_bits, r);
+  let canonical = slot_idx as usize;
+  if self.qf_delete(fp, canonical) {
+    self.num_items = self.num_items.saturating_sub(1);
+    return true;
+  } else {
+    return false;
+  }
+}
+
+fn qf_delete(&mut self, fp: u64, canonical: usize) -> bool {
+  // ... locate match in run ...
+  if self.slots[del_pos].is_void() {
+    self.slots[del_pos] = Slot::tombstone();
+    return true;
+  }
+  // ... full cluster compaction for regular entries ...
+}
+\end{lstlisting}
+
+So the implementation preserves quotient-filter cluster invariants for regular deletions, but intentionally uses tombstone-only behavior for void deletions.
+
+\subsubsection{Void Deletion: Our Simplification}
+\label{sec:void-delete-tradeoff}
+
+The paper's full deletion algorithm for void entries involves two phases. In Phase~1, the void entry at the queried slot is immediately replaced with a tombstone. In Phase~2, deferred to the next expansion, the filter looks up the void entry's mother hash in a secondary filter chain, computes the locations of all $2^{k-b}$ duplicate copies (where $k = \log_2(\text{table size})$ and $b$ is the length of the mother hash), and removes every one of them.
+
+Our implementation performs \textbf{only Phase~1}. The relevant code is straightforward:
+
+\begin{lstlisting}[caption={Void deletion in our Rust implementation}]
+if self.slots[del_pos].is_void() {
+    self.slots[del_pos] = Slot::tombstone();
+    return true;
+}
+\end{lstlisting}
+
+We tombstone the void entry at the slot where the query found it, but we do not track down or remove any of its duplicates. This has two concrete consequences:
+
+\begin{table}[H]
+  \centering
+  \caption{Behavioral differences when deleting a void entry}
+  \label{tab:void-delete}
+  \begin{tabular}{p{4.5cm} p{4cm} p{4cm}}
+    \hline
+    \textbf{Scenario} & \textbf{Paper (full)} & \textbf{Ours (tombstone only)} \\
+    \hline
+    Query the deleted key at the tombstoned slot & Returns \textsc{false} \checkmark & Returns \textsc{false} \checkmark \\
+    \hline
+    Query the deleted key at a \textit{different} duplicate slot & Duplicate was removed; returns \textsc{false} \checkmark & Duplicate still present; returns \textsc{true} (false positive) \\
+    \hline
+    Space reclamation & All $2^{k-b}$ duplicates freed & Duplicates remain, wasting space \\
+    \hline
+  \end{tabular}
+\end{table}
+
+In other words, tombstoning alone blocks the query at the specific slot where the tombstone was placed, but queries that hash to one of the remaining duplicate slots will still encounter a void entry and return \textsc{true}. This is a \textit{false positive for a deleted key}, which the paper's full algorithm avoids.
+
+\paragraph{Why we accepted this tradeoff.}
+The full duplicate-removal mechanism requires three additional components that our implementation does not have:
+
+\begin{enumerate}
+    \item A \textbf{secondary filter} (itself a quotient filter) to store the mother hash of each void entry when it is first created during expansion.
+    \item A \textbf{\texttt{delete\_duplicates}} function that, given the mother hash length $b$, computes all $2^{k-b}$ duplicate slot addresses and removes a void entry from each one.
+    \item A \textbf{deletion queue} that batches tombstoned addresses and processes them in bulk before the next expansion.
+\end{enumerate}
+
+Implementing these components would roughly double the codebase (approximately 250 additional lines) and introduce a recursive data structure (the secondary filter can itself overflow, requiring a tertiary filter, and so on). We chose to omit this subsystem for two reasons:
+
+\begin{itemize}
+    \item \textbf{Scope}: The secondary chain is an auxiliary subsystem for delete correctness, not part of the core Aleph contribution (void duplication for $O(1)$ queries). Omitting it keeps the implementation focused on demonstrating the main algorithm.
+    \item \textbf{Workload}: The tradeoff only manifests when void entries are deleted. An entry becomes void only after it has survived at least $F$ expansions (where $F$ is the initial fingerprint length, typically 7--10). In most practical workloads, entries that old represent a tiny fraction of the data, and deleting them is rare.
+\end{itemize}
+
+For workloads that do not delete old entries, this gap never manifests. For workloads that do, the consequence is a bounded increase in false positives for deleted keys, not a correctness violation for other keys.
+
+% ============================================================================
+\section{Fidelity to the Paper}
+% ============================================================================
+
+This section documents exactly what matches and what was intentionally simplified compared the official rust implementation at \texttt{github.com/nivdayan/AlephFilter} (branch \texttt{aleph\_filter}), to make the scope of this implementation clear. 
+
+\subsection{What Matches Exactly}
+
+Table~\ref{tab:matching} lists every component where our Rust code follows the same algorithm as the Java, verified by side-by-side code comparison.
+
+\begin{table}[H]
+  \centering
+  \caption{Components matching the Java reference implementation}
+  \label{tab:matching}
+  \begin{tabular}{l l}
+    \hline
+    \textbf{Component} & \textbf{Status} \\
+    \hline
+    Hash splitting (quotient / remainder)        & Exact match \\
+    Metadata flags (Occupied, Continuation, Shifted) & Exact match \\
+    \texttt{find\_run\_start} algorithm          & Exact match \\
+    \texttt{find\_new\_run\_location} algorithm  & Exact match \\
+    \texttt{insert\_new\_run} with swap chain    & Exact match \\
+    \texttt{insert\_into\_run} (push-all-else)   & Exact match \\
+    \texttt{search} / \texttt{find\_in\_run}     & Exact match \\
+    Iterator state machine (5 metadata cases)    & Exact match \\
+    Pivot-bit expansion (\texttt{expand})         & Exact match \\
+    Void duplication to both new canonical slots  & Exact match \\
+    Full cluster-aware deletion                   & Exact match \\
+    Load factor threshold ($0.8$)                 & Exact match \\
+    Extension slots formula ($q \times 2$)        & Exact match \\
+    \hline
+  \end{tabular}
+\end{table}
+
+In short: the quotient filter core (insertion, lookup, deletion), the expansion algorithm (pivot-bit sacrifice with void duplication), and the iterator used during expansion all follow the same logic as the Java implementation.
+
+\subsection{What Does Not Match}
+
+Six aspects of the Java implementation are not reproduced in our Rust code. Table~\ref{tab:differences} summarizes each difference alongside the Java's approach and our alternative.
+
+\begin{table}[H]
+  \centering
+  \caption{Differences between our Rust implementation and the Java reference}
+  \label{tab:differences}
+  \begin{tabular}{p{3.2cm} p{4.2cm} p{4.8cm}}
+    \hline
+    \textbf{Feature} & \textbf{Java Reference} & \textbf{Our Rust} \\
+    \hline
+    Storage model & Packed bit array; each slot is $(3{+}r)$ bits & 64-bit struct per slot \\
+    \hline
+    Unary encoding & High fingerprint bits encode entry age via unary prefix & Slot stores explicit length; overlap comparison instead \\
+    \hline
+    Secondary filter chain & Tracks void entry origins for duplicate cleanup on delete & Not implemented; voids are tombstoned \\
+    \hline
+    Lazy delete batching & Defers duplicate removal; batch-resolves later & Not implemented \\
+    \hline
+    Rejuvenation & Replaces a void entry with a fresh fingerprint & Not implemented \\
+    \hline
+    FP growth strategy & Multiple strategies (\textsc{uniform}, \textsc{polynomial}) & Fixed: shrinks by 1 bit per expansion \\
+    \hline
+  \end{tabular}
+\end{table}
+
+Table~\ref{tab:differences} is the authoritative summary of scope differences. We intentionally keep this section brief to avoid repeating the operation-level explanations above.
+
+In short:
+\begin{itemize}
+  \item We prioritize clarity over bit-packing by using explicit \texttt{Slot} and \texttt{SlotMetadata} structures.
+  \item We use explicit fingerprint lengths instead of unary age encoding.
+  \item We implement tombstone-only void deletion (no secondary chain, no lazy duplicate cleanup, no rejuvenation).
+  \item We use a fixed shrink strategy (one fingerprint bit per expansion).
+\end{itemize}
+
+\begin{insightbox}[Key Takeaway]
+Our implementation captures the \textbf{core algorithmic contribution} of the Aleph Filter paper: pivot-bit expansion with void duplication, enabling $O(1)$ queries regardless of how many times the filter has expanded. This is the feature that distinguishes the Aleph Filter from InfiniFilter, and it is fully implemented. The remaining differences are either memory optimizations (packed bitmap), performance optimizations (lazy deletes), or auxiliary subsystems for advanced delete semantics (secondary chain, rejuvenation).
+\end{insightbox}

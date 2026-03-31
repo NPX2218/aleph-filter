@@ -1,0 +1,124 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\citation{carter}
+\citation{bloom}
+\citation{chrome-bloom}
+\@writefile{toc}{\contentsline {chapter}{\numberline {1}Background: Probabilistic Filters}{1}{chapter.1}\protected@file@percent }
+\@writefile{lof}{\addvspace {10\p@ }}
+\@writefile{lot}{\addvspace {10\p@ }}
+\@writefile{loa}{\addvspace {10\p@ }}
+\@writefile{toc}{\contentsline {section}{\numberline {1.1}What Are Filters?}{1}{section.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.1.1}Hash Functions and Collisions}{1}{subsection.1.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.1.2}The Need for Filters}{1}{subsection.1.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {1.2}Bloom Filters}{1}{section.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2.1}Structure and Operations}{2}{subsection.1.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2.2}Worked Example}{2}{subsection.1.2.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1.1}{\ignorespaces Initial state: all bits set to 0.}}{2}{figure.caption.2}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:bloom-empty}{{1.1}{2}{Initial state: all bits set to 0}{figure.caption.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1.2}{\ignorespaces After inserting \texttt  {"hello"}: bits 1, 4, and 9 are set.}}{2}{figure.caption.3}\protected@file@percent }
+\newlabel{fig:bloom-insert-hello}{{1.2}{2}{After inserting \texttt {"hello"}: bits 1, 4, and 9 are set}{figure.caption.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1.3}{\ignorespaces After inserting \texttt  {"world"}: bits 3, 4, and 7 are set. Bit 4 was already set by \texttt  {"hello"}.}}{3}{figure.caption.4}\protected@file@percent }
+\newlabel{fig:bloom-insert-world}{{1.3}{3}{After inserting \texttt {"world"}: bits 3, 4, and 7 are set. Bit 4 was already set by \texttt {"hello"}}{figure.caption.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1.4}{\ignorespaces Querying \texttt  {"cat"}: bit 2 is 0, so the filter correctly returns \textsc  {no}.}}{3}{figure.caption.5}\protected@file@percent }
+\newlabel{fig:bloom-query-cat}{{1.4}{3}{Querying \texttt {"cat"}: bit 2 is 0, so the filter correctly returns \textsc {no}}{figure.caption.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1.5}{\ignorespaces Querying \texttt  {"dog"}: all checked bits happen to be 1 (set by other insertions), so the filter incorrectly returns \textsc  {yes}. This is a false positive.}}{3}{figure.caption.6}\protected@file@percent }
+\newlabel{fig:bloom-query-dog}{{1.5}{3}{Querying \texttt {"dog"}: all checked bits happen to be 1 (set by other insertions), so the filter incorrectly returns \textsc {yes}. This is a false positive}{figure.caption.6}{}}
+\citation{mitzenmacher}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2.3}False Positive Rate}{4}{subsection.1.2.3}\protected@file@percent }
+\newlabel{eq:bloom-fpr}{{1.1}{4}{False Positive Rate}{equation.1.1}{}}
+\newlabel{eq:bloom-optimal-k}{{1.2}{5}{False Positive Rate}{equation.1.2}{}}
+\newlabel{eq:bloom-fpr-optimal}{{1.3}{5}{False Positive Rate}{equation.1.3}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {1.1}{\ignorespaces False positive rate vs.\ bits per element (with optimal $k$)}}{5}{table.caption.7}\protected@file@percent }
+\newlabel{tab:bloom-fpr}{{1.1}{5}{False positive rate vs.\ bits per element (with optimal $k$)}{table.caption.7}{}}
+\citation{bloom}
+\citation{cuckoo}
+\@writefile{lof}{\contentsline {figure}{\numberline {1.6}{\ignorespaces False positive rate as a function of bits per element with optimal $k$. The rate decreases exponentially: doubling the bits per element roughly squares the improvement. This means that as the total ratio of bits per element increases, the FPR goes down.}}{6}{figure.caption.8}\protected@file@percent }
+\newlabel{fig:bloom-fpr-curve}{{1.6}{6}{False positive rate as a function of bits per element with optimal $k$. The rate decreases exponentially: doubling the bits per element roughly squares the improvement. This means that as the total ratio of bits per element increases, the FPR goes down}{figure.caption.8}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2.4}Space Efficiency}{6}{subsection.1.2.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {1.3}Cuckoo Filters}{6}{section.1.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.3.1}Structure and Operations}{7}{subsection.1.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.3.2}Worked Example}{7}{subsection.1.3.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1.7}{\ignorespaces Two empty hash tables for cuckoo hashing.}}{7}{figure.caption.9}\protected@file@percent }
+\newlabel{fig:cuckoo-empty}{{1.7}{7}{Two empty hash tables for cuckoo hashing}{figure.caption.9}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1.8}{\ignorespaces Insert \texttt  {A}: placed in $T_1[1]$.}}{7}{figure.caption.10}\protected@file@percent }
+\newlabel{fig:cuckoo-insert-a}{{1.8}{7}{Insert \texttt {A}: placed in $T_1[1]$}{figure.caption.10}{}}
+\citation{cuckoo}
+\@writefile{lof}{\contentsline {figure}{\numberline {1.9}{\ignorespaces Insert \texttt  {B}: placed in $T_1[3]$.}}{8}{figure.caption.11}\protected@file@percent }
+\newlabel{fig:cuckoo-insert-b}{{1.9}{8}{Insert \texttt {B}: placed in $T_1[3]$}{figure.caption.11}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1.10}{\ignorespaces Insert \texttt  {C}: evicts \texttt  {A} from $T_1[1]$. \texttt  {A} moves to its alternative slot $T_2[2]$.}}{8}{figure.caption.12}\protected@file@percent }
+\newlabel{fig:cuckoo-eviction}{{1.10}{8}{Insert \texttt {C}: evicts \texttt {A} from $T_1[1]$. \texttt {A} moves to its alternative slot $T_2[2]$}{figure.caption.12}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.3.3}From Cuckoo Hashing to Cuckoo Filters}{8}{subsection.1.3.3}\protected@file@percent }
+\citation{cuckoo}
+\@writefile{toc}{\contentsline {subsubsection}{Single-Array Structure and Bucket Positions}{9}{subsubsection*.13}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1.11}{\ignorespaces A single hash of the key is split: the long part computes the bucket index, the short part becomes the stored fingerprint. The two parts must not overlap to avoid correlation.}}{9}{figure.caption.14}\protected@file@percent }
+\newlabel{fig:hash-split}{{1.11}{9}{A single hash of the key is split: the long part computes the bucket index, the short part becomes the stored fingerprint. The two parts must not overlap to avoid correlation}{figure.caption.14}{}}
+\newlabel{eq:cuckoo-h1}{{1.4}{9}{Single-Array Structure and Bucket Positions}{equation.1.4}{}}
+\newlabel{eq:cuckoo-h2}{{1.5}{9}{Single-Array Structure and Bucket Positions}{equation.1.5}{}}
+\citation{cuckoo}
+\citation{cuckoo}
+\@writefile{lof}{\contentsline {figure}{\numberline {1.12}{\ignorespaces The cuckoo filter stores fingerprints in a single array. Element \texttt  {"hello"} maps to buckets 2 and 6; only the fingerprint \texttt  {0x56} is stored in one of them.}}{10}{figure.caption.15}\protected@file@percent }
+\newlabel{fig:cuckoo-filter-array}{{1.12}{10}{The cuckoo filter stores fingerprints in a single array. Element \texttt {"hello"} maps to buckets 2 and 6; only the fingerprint \texttt {0x56} is stored in one of them}{figure.caption.15}{}}
+\@writefile{toc}{\contentsline {subsubsection}{XOR Symmetry and Eviction}{10}{subsubsection*.16}\protected@file@percent }
+\newlabel{eq:xor-inverse}{{1.6}{10}{XOR Symmetry and Eviction}{equation.1.6}{}}
+\newlabel{eq:cuckoo-alternate}{{1.7}{10}{XOR Symmetry and Eviction}{equation.1.7}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1.13}{\ignorespaces XOR symmetry enables eviction without the original key: given any bucket index and the fingerprint, the alternate bucket is always computable.}}{10}{figure.caption.17}\protected@file@percent }
+\newlabel{fig:cuckoo-xor}{{1.13}{10}{XOR symmetry enables eviction without the original key: given any bucket index and the fingerprint, the alternate bucket is always computable}{figure.caption.17}{}}
+\citation{cuckoo}
+\@writefile{toc}{\contentsline {subsubsection}{Bucket Structure}{11}{subsubsection*.18}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1.14}{\ignorespaces A single bucket with $b = 4$ slots. Three fingerprints are stored; one slot remains empty. An insertion into this bucket takes the empty slot without triggering eviction.}}{11}{figure.caption.19}\protected@file@percent }
+\newlabel{fig:cuckoo-bucket}{{1.14}{11}{A single bucket with $b = 4$ slots. Three fingerprints are stored; one slot remains empty. An insertion into this bucket takes the empty slot without triggering eviction}{figure.caption.19}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Operations}{11}{subsubsection*.20}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{False Positive Rate}{11}{subsubsection*.21}\protected@file@percent }
+\newlabel{eq:cuckoo-fpr}{{1.8}{11}{False Positive Rate}{equation.1.8}{}}
+\newlabel{eq:cuckoo-fp-size}{{1.9}{12}{False Positive Rate}{equation.1.9}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Space Efficiency}{12}{subsubsection*.22}\protected@file@percent }
+\newlabel{eq:cuckoo-space}{{1.10}{12}{Space Efficiency}{equation.1.10}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {1.2}{\ignorespaces Space comparison: Cuckoo filter ($b = 4$, $\alpha = 0.955$) vs.\ Bloom filter at various false positive rates.}}{12}{table.caption.23}\protected@file@percent }
+\newlabel{tab:cuckoo-vs-bloom}{{1.2}{12}{Space comparison: Cuckoo filter ($b = 4$, $\alpha = 0.955$) vs.\ Bloom filter at various false positive rates}{table.caption.23}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {1.4}Summary of Filter Limitations}{12}{section.1.4}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1.3}{\ignorespaces Capabilities and limitations of the filters discussed so far. The gaps in this table motivate the quotient filter family and the Aleph Filter.}}{13}{table.caption.24}\protected@file@percent }
+\newlabel{tab:filter-limitations}{{1.3}{13}{Capabilities and limitations of the filters discussed so far. The gaps in this table motivate the quotient filter family and the Aleph Filter}{table.caption.24}{}}
+\@setckpt{chapters/background}{
+\setcounter{page}{14}
+\setcounter{equation}{10}
+\setcounter{enumi}{3}
+\setcounter{enumii}{0}
+\setcounter{enumiii}{0}
+\setcounter{enumiv}{0}
+\setcounter{footnote}{0}
+\setcounter{mpfootnote}{0}
+\setcounter{part}{0}
+\setcounter{chapter}{1}
+\setcounter{section}{4}
+\setcounter{subsection}{0}
+\setcounter{subsubsection}{0}
+\setcounter{paragraph}{0}
+\setcounter{subparagraph}{0}
+\setcounter{figure}{14}
+\setcounter{table}{3}
+\setcounter{parentequation}{0}
+\setcounter{section@level}{0}
+\setcounter{Item}{16}
+\setcounter{Hfootnote}{0}
+\setcounter{bookmark@seq@number}{14}
+\setcounter{float@type}{16}
+\setcounter{caption@flags}{2}
+\setcounter{continuedfloat}{0}
+\setcounter{lstnumber}{1}
+\setcounter{AlgoLine}{0}
+\setcounter{algocfline}{0}
+\setcounter{algocfproc}{0}
+\setcounter{algocf}{0}
+\setcounter{tcbbreakpart}{1}
+\setcounter{tcblayer}{0}
+\setcounter{tcolorbox@number}{9}
+\setcounter{tcbrastercolumn}{1}
+\setcounter{tcbrasterrow}{1}
+\setcounter{tcbrasternum}{1}
+\setcounter{tcbraster}{0}
+\setcounter{tcblisting}{0}
+\setcounter{definition}{0}
+\setcounter{theorem}{0}
+\setcounter{lstlisting}{0}
+}

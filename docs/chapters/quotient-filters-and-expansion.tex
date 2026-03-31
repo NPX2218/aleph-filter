@@ -1,0 +1,845 @@
+\chapter{Quotient Filters and Expansion}
+
+The previous chapter established that Bloom filters cannot delete and 
+cuckoo filters cannot expand. Both limitations stem from the same root 
+cause: the stored representation (bits or fingerprints) does not retain 
+enough information to reconstruct the element's position in a resized 
+table.
+
+Quotient filters, introduced by Bender et al.\ \cite{quotient}, solve 
+the expansion problem with an elegant insight: instead of computing the 
+bucket index and fingerprint from \emph{separate} parts of the hash 
+(as cuckoo filters do), they derive both from a \emph{single} hash by 
+splitting it at a chosen bit position. This means the bucket index and 
+fingerprint together always reconstruct the full hash, and expansion 
+simply moves the split point.
+
+\section{The Quotienting Idea}
+
+\begin{definitionbox}[Quotienting]
+Given a $p$-bit hash $h(x)$, we split it into two parts at bit position 
+$q$:
+\begin{itemize}
+  \item \textbf{Quotient}: the top $q$ bits, denoted $h_q(x)$ 
+        $\rightarrow$ determines the \emph{slot address}
+  \item \textbf{Remainder}: the bottom $r = p - q$ bits, denoted $h_r(x)$ 
+        $\rightarrow$ stored as the \emph{fingerprint}
+\end{itemize}
+The table has $2^q$ slots. Together, the quotient and remainder 
+reconstruct the full hash: $h(x) = h_q(x) \| h_r(x)$, where $\|$ 
+denotes concatenation.
+\end{definitionbox}
+
+This is fundamentally different from the cuckoo filter's approach. 
+Recall that in a cuckoo filter, the bucket index comes from 
+$H(x) \mod m$ and the fingerprint comes from a separate 
+portion of the hash. The modulo operation is \textbf{lossy}: multiple 
+distinct hash values map to the same remainder (e.g., both 
+$10 \mod 8 = 2$ and $18 \mod 8 = 2$), so knowing 
+$H(x) \mod m$ does not reveal what $H(x) \mod m'$ would be for 
+a different table size $m'$. This lost information is precisely what 
+prevents cuckoo filters from expanding. In a quotient filter, the concatenating them reconstructs the original value exactly, so no 
+information is ever lost.
+
+% ---- EXAMPLE: Hash split diagram ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    % Full hash
+    \node[font=\small\ttfamily] at (-1.5, 0) {$h(x) =$};
+    
+    % Quotient bits
+    \foreach \i/\val in {0/1, 1/0, 2/1} {
+      \node[bit, fill=AccentTeal!20] (q\i) at (\i*0.6, 0) {\val};
+    }
+    
+    % Remainder bits
+    \foreach \i/\val in {3/1, 4/0, 5/1, 6/1, 7/0} {
+      \node[bit, fill=AccentOrange!20] (r\i) at (\i*0.6, 0) {\val};
+    }
+    
+    % Braces
+    \draw[brace] (q0.north west) -- (q2.north east) 
+      node[midway, above=10pt, font=\small, text=AccentTeal] 
+      {Quotient $h_q(x)$ ($q = 3$ bits)};
+    \draw[brace] (r3.north west) -- (r7.north east) 
+      node[midway, above=10pt, yshift=20px, font=\small, text=AccentOrange] 
+      {Remainder $h_r(x)$ ($r = 5$ bits)};
+    
+    % Annotations
+    \node[lbl, align=center] at (1*0.6, -1.1) 
+      {$\rightarrow$ slot address\\$\quot{101}_2 = 5$};
+    \node[lbl, align=center, xshift=20px] at (5*0.6, -1.1) 
+      {$\rightarrow$ stored fingerprint\\$\rem{10110}_2$};
+  \end{tikzpicture}
+  \caption{An 8-bit hash split into a 3-bit quotient (slot address) and 
+           5-bit remainder (stored fingerprint). The table has 
+           $2^3 = 8$ slots.}
+  \label{fig:quotienting}
+\end{figure}
+
+\begin{insightbox}[Cuckoo vs.\ Quotient: The Key Difference]
+In a \textbf{cuckoo filter}, the bucket index and fingerprint are 
+\emph{independent}, which means knowing one tells you nothing about the other. 
+In a \textbf{quotient filter}, they are \emph{complementary}, and 
+together they reconstruct the full hash. This complementarity is what 
+enables expansion without access to the original keys.
+\end{insightbox}
+
+\subsection{Worked Example: Insertion}
+
+Consider a quotient filter with $p = 8$-bit hashes, $q = 3$-bit 
+quotients, and $r = 5$-bit remainders. The table has $2^3 = 8$ slots. 
+Suppose we insert three elements:
+
+\begin{align*}
+  h(\texttt{"hello"}) &= \underbrace{101}_{\text{quotient}} 
+                         \underbrace{10101}_{\text{remainder}} 
+                         \quad \rightarrow \text{slot } 5, 
+                         \text{ store } \rem{10101} \\
+  h(\texttt{"world"}) &= \underbrace{011}_{\text{quotient}} 
+                         \underbrace{00110}_{\text{remainder}} 
+                         \quad \rightarrow \text{slot } 3, 
+                         \text{ store } \rem{00110} \\
+  h(\texttt{"cat"})   &= \underbrace{101}_{\text{quotient}} 
+                         \underbrace{11010}_{\text{remainder}} 
+                         \quad \rightarrow \text{slot } 5, 
+                         \text{ store } \rem{11010}
+\end{align*}
+
+The first two elements go directly into their home slots. But 
+\texttt{"cat"} also hashes to slot 5, which is already occupied by 
+\texttt{"hello"}. This is a \textbf{soft collision}: different keys with 
+the same quotient but different remainders. The quotient filter resolves 
+this by storing \texttt{"cat"}'s remainder in the next available slot 
+(slot 6) using linear probing. Remainders within a run are kept in 
+sorted order, so \texttt{"hello"}'s remainder (10101) stays in the 
+home slot and \texttt{"cat"}'s larger remainder (11010) is placed after it:
+
+% ---- Diagram: Simple insertion with collision ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    % Slots
+    \foreach \i in {0,...,7} {
+      \node[emptyslot, minimum width=1.3cm] (s\i) at (\i*1.4, 0) {};
+      \node[font=\tiny, text=MedGray] at (\i*1.4, -0.55) {\i};
+    }
+    
+    % Filled slots
+    \node[fullslot, minimum width=1.3cm] at (3*1.4, 0) {\rem{00110}};
+    \node[fullslot, minimum width=1.3cm] at (5*1.4, 0) {\rem{10101}};
+    \node[fullslot, minimum width=1.3cm] at (6*1.4, 0) {\rem{11010}};
+    
+    % Labels
+    \node[font=\scriptsize, text=AccentTeal] at (3*1.4, 0.6) 
+      {\texttt{"world"}};
+    \node[font=\scriptsize, text=AccentTeal] at (5*1.4, 0.6) 
+      {\texttt{"hello"}};
+    \node[font=\scriptsize, text=AccentTeal] at (6*1.4, 0.6) 
+      {\texttt{"cat"}};
+    
+    % Show that cat was shifted
+    \draw[arrow, AccentRed, thick] (5*1.4 - 0.1, -0.9) -- (6*1.4 + 0.1, -0.9)
+      node[midway, below, font=\scriptsize, text=AccentRed, yshift=-3pt] 
+      {shifted right};
+    
+    % Brace for run
+    \draw[brace] (5*1.4 - 0.6, 1.0) -- (6*1.4 + 0.6, 1.0)
+      node[midway, above=10pt, font=\scriptsize, text=DarkGray] 
+      {run for quotient 5};
+  \end{tikzpicture}
+  \caption{After inserting \texttt{"hello"}, \texttt{"world"}, and 
+           \texttt{"cat"}. Elements with the same quotient form a 
+           \textbf{run} stored in contiguous slots.}
+  \label{fig:quotient-insertion}
+\end{figure}
+
+The set of remainders sharing the same quotient is called a \textbf{run}. 
+A sequence of contiguous runs is called a \textbf{cluster}. As the table 
+fills, clusters grow longer, which increases lookup time, a limitation 
+we will revisit.
+
+
+\section{Metadata Bits}
+
+Storing remainders in shifted positions creates an ambiguity: given a 
+remainder in some slot, how do we know which quotient it belongs to? The 
+quotient filter resolves this with three metadata bits per slot 
+\cite{quotient}:
+
+\begin{definitionbox}[Metadata Bits]
+Each slot $j$ in the quotient filter maintains three single-bit flags:
+\begin{enumerate}
+  \item \textbf{\texttt{is\_occupied}}: Set to 1 if quotient $j$ is the 
+        home slot for \emph{some} element in the filter (the element may 
+        be stored elsewhere due to shifting).
+  \item \textbf{\texttt{is\_continuation}}: Set to 1 if this slot holds 
+        a remainder that is \emph{not the first} in its run (i.e., it 
+        continues a run from a previous slot).
+  \item \textbf{\texttt{is\_shifted}}: Set to 1 if the remainder in this 
+        slot has been displaced from its home slot (i.e., it does not 
+        occupy the slot matching its quotient).
+\end{enumerate}
+\end{definitionbox}
+
+These three bits encode enough information to reconstruct which quotient 
+each remainder belongs to, without storing the quotient explicitly. The 
+key relationships are:
+
+\begin{itemize}
+  \item A slot with \texttt{is\_occupied = 0}, \texttt{is\_continuation = 0}, 
+        \texttt{is\_shifted = 0} is \textbf{empty}.
+  \item A slot with \texttt{is\_shifted = 0} and 
+        \texttt{is\_continuation = 0} marks the \textbf{start of a 
+        cluster}, meaning its the first element of a run in its home slot.
+  \item \texttt{is\_continuation = 0} marks the \textbf{start of a new 
+        run} within a cluster.
+  \item \texttt{is\_occupied} is attached to the \emph{slot index}, not 
+        the stored remainder. It says ``some element with this quotient 
+        exists somewhere in the table.''
+\end{itemize}
+
+\subsection{Worked Example: Metadata in Action}
+
+Continuing from Figure~\ref{fig:quotient-insertion}, suppose we also 
+insert an element with quotient 6:
+
+\begin{align*}
+  h(\texttt{"dog"}) &= \underbrace{110}_{\text{quotient}} 
+                       \underbrace{01001}_{\text{remainder}} 
+                       \quad \rightarrow \text{slot } 6
+\end{align*}
+
+Slot 6 is occupied by \texttt{"cat"} (which was shifted from slot 5). 
+So \texttt{"dog"}'s remainder gets pushed to slot 7. The full state:
+
+% ---- Diagram: Metadata bits ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    % Column headers
+    \node[font=\scriptsize\bfseries, text=DarkGray] at (-2.2, 0) {Slot};
+    \node[font=\scriptsize\bfseries, text=DarkGray] at (-2.2, -0.7) {Remainder};
+    \node[font=\scriptsize\bfseries, text=DarkGray] at (-2.2, -1.4) 
+      {\texttt{is\_occupied}};
+    \node[font=\scriptsize\bfseries, text=DarkGray] at (-2.2, -2.1) 
+      {\texttt{is\_cont.}};
+    \node[font=\scriptsize\bfseries, text=DarkGray] at (-2.2, -2.8) 
+      {\texttt{is\_shifted}};
+    \node[font=\scriptsize\bfseries, text=DarkGray] at (-2.2, -3.6) 
+      {Belongs to};
+    
+    % Slot 3 — "world"
+    \node[font=\scriptsize] at (0, 0) {3};
+    \node[fullslot, minimum width=1.3cm] at (0, -0.7) {\rem{00110}};
+    \node[font=\scriptsize] at (0, -1.4) {1};
+    \node[font=\scriptsize] at (0, -2.1) {0};
+    \node[font=\scriptsize] at (0, -2.8) {0};
+    \node[font=\scriptsize, text=AccentTeal] at (0, -3.6) {$q = 3$};
+    
+    % Slot 4 — empty
+    \node[font=\scriptsize] at (1.6, 0) {4};
+    \node[emptyslot, minimum width=1.3cm] at (1.6, -0.7) {};
+    \node[font=\scriptsize, text=MedGray] at (1.6, -1.4) {0};
+    \node[font=\scriptsize, text=MedGray] at (1.6, -2.1) {0};
+    \node[font=\scriptsize, text=MedGray] at (1.6, -2.8) {0};
+    \node[font=\scriptsize, text=MedGray] at (1.6, -3.6) {---};
+    
+    % Slot 5 — "hello"
+    \node[font=\scriptsize] at (3.2, 0) {5};
+    \node[fullslot, minimum width=1.3cm] at (3.2, -0.7) {\rem{10101}};
+    \node[font=\scriptsize] at (3.2, -1.4) {1};
+    \node[font=\scriptsize] at (3.2, -2.1) {0};
+    \node[font=\scriptsize] at (3.2, -2.8) {0};
+    \node[font=\scriptsize, text=AccentTeal] at (3.2, -3.6) {$q = 5$};
+    
+    % Slot 6 — "cat" (shifted from 5)
+    \node[font=\scriptsize] at (4.8, 0) {6};
+    \node[fullslot, minimum width=1.3cm] at (4.8, -0.7) {\rem{11010}};
+    \node[font=\scriptsize] at (4.8, -1.4) {1};
+    \node[font=\scriptsize] at (4.8, -2.1) {1};
+    \node[font=\scriptsize] at (4.8, -2.8) {1};
+    \node[font=\scriptsize, text=AccentTeal] at (4.8, -3.6) {$q = 5$};
+    
+    % Slot 7 — "dog" (shifted from 6)
+    \node[font=\scriptsize] at (6.4, 0) {7};
+    \node[fullslot, minimum width=1.3cm] at (6.4, -0.7) {\rem{01001}};
+    \node[font=\scriptsize] at (6.4, -1.4) {0};
+    \node[font=\scriptsize] at (6.4, -2.1) {0};
+    \node[font=\scriptsize] at (6.4, -2.8) {1};
+    \node[font=\scriptsize, text=AccentTeal] at (6.4, -3.6) {$q = 6$};
+    
+    % Run braces
+    \draw[brace] (3.2 - 0.6, 0.4) -- (4.8 + 0.6, 0.4)
+      node[midway, above=10pt, font=\scriptsize, text=AccentBlue] 
+      {run for $q = 5$};
+    \draw[decorate, decoration={brace, amplitude=4pt, raise=2pt, 
+      mirror}, thick, DarkGray] 
+      (3.2 - 0.6, -4.1) -- (6.4 + 0.6, -4.1)
+      node[midway, below=8pt, font=\scriptsize, text=DarkGray] 
+      {cluster (contiguous occupied region)};
+  \end{tikzpicture}
+  \caption{Quotient filter state after inserting \texttt{"world"} 
+           ($q = 3$), \texttt{"hello"} ($q = 5$), \texttt{"cat"} 
+           ($q = 5$), and \texttt{"dog"} ($q = 6$). The metadata bits 
+           encode run boundaries and shift status.}
+  \label{fig:quotient-metadata}
+\end{figure}
+
+Reading the metadata for each slot:
+\begin{itemize}
+  \item \textbf{Slot 3}: \texttt{is\_occupied = 1} (quotient 3 has 
+        elements), \texttt{is\_shifted = 0} (it is in its home slot), 
+        \texttt{is\_continuation = 0} (first in its run). This is 
+        \texttt{"world"}'s home.
+  \item \textbf{Slot 5}: \texttt{is\_occupied = 1} (quotient 5 has 
+        elements), \texttt{is\_shifted = 0} (in its home slot), 
+        \texttt{is\_continuation = 0} (starts a new run). This is 
+        \texttt{"hello"}.
+  \item \textbf{Slot 6}: \texttt{is\_occupied = 1} (quotient 6 has 
+        elements somewhere), \texttt{is\_shifted = 1} (not in its home 
+        slot), \texttt{is\_continuation = 1} (continues the run from 
+        slot 5). This is \texttt{"cat"}, which belongs to quotient 5 but 
+        is stored in slot 6.
+  \item \textbf{Slot 7}: \texttt{is\_occupied = 0} (no element has 
+        quotient 7), \texttt{is\_shifted = 1} (displaced from slot 6), 
+        \texttt{is\_continuation = 0} (starts a new run). This is 
+        \texttt{"dog"}, which belongs to quotient 6.
+\end{itemize}
+
+\subsection{Lookup Algorithm}
+
+To query whether an element $x$ with quotient $q$ and remainder $r$ is 
+in the filter:
+
+\begin{enumerate}
+  \item Check slot $q$. If \texttt{is\_occupied = 0}, then no element 
+        with quotient $q$ exists, return \textsc{no}.
+  \item \textbf{Find the cluster start}: scan left from slot $q$ until 
+        a slot with \texttt{is\_shifted = 0} is found. This is where 
+        the cluster begins.
+  \item \textbf{Skip preceding runs}: scan right through the cluster, 
+        counting runs. Each \texttt{is\_occupied = 1} slot to the left 
+        of $q$ indicates a run to skip. Each 
+        \texttt{is\_continuation = 0} slot marks the start of a new run. 
+        When the count reaches zero, the current position is the start 
+        of quotient $q$'s run.
+  \item \textbf{Search the run}: compare the remainder in each slot of 
+        the run to $r$. If a match is found, return \textsc{yes} 
+        (probably in the set). If the run ends without a match, return 
+        \textsc{no} (definitely not in the set).
+\end{enumerate}
+
+\begin{examplebox}[Lookup for \texttt{"dog"} (quotient $= 6$)]
+\begin{enumerate}
+  \item Slot 6: \texttt{is\_occupied = 1} $\rightarrow$ quotient 6 has 
+        elements. Proceed.
+  \item Scan left: slot 6 has \texttt{is\_shifted = 1}, slot 5 has 
+        \texttt{is\_shifted = 0} $\rightarrow$ cluster starts at slot 5.
+  \item Scan right from slot 5, counting runs. Between slot 5 and slot 6, 
+        there is one \texttt{is\_occupied} slot (slot 5) before our 
+        target (slot 6), so we skip one run:
+        \begin{itemize}
+          \item Slot 5: \texttt{is\_continuation = 0} $\rightarrow$ 
+                start of run for $q = 5$ (skip this run)
+          \item Slot 6: \texttt{is\_continuation = 1} $\rightarrow$ 
+                still $q = 5$'s run
+          \item Slot 7: \texttt{is\_continuation = 0} $\rightarrow$ 
+                new run starts $\rightarrow$ this is $q = 6$'s run!
+        \end{itemize}
+  \item Slot 7 contains remainder $\rem{01001}$. Compare to 
+        \texttt{"dog"}'s remainder $\rem{01001}$ $\rightarrow$ match! 
+        Return \textsc{yes}.
+\end{enumerate}
+\end{examplebox}
+
+Notice that this lookup required scanning through multiple slots. In the 
+worst case, if all elements hash to the same quotient, a single run 
+could span the entire table, requiring $O(n)$ time. In practice with a 
+good hash function, runs are short and expected lookup time is $O(1)$. 
+However, as the load factor increases, clusters grow and performance 
+degrades, quotient filters are typically not filled beyond 75\% 
+\cite{quotient}.
+
+
+\section{How Expansion Works}
+
+This is where the quotient filter's design pays off. Because the 
+quotient and remainder together form the complete hash, expanding the 
+table requires no access to the original keys, only a reinterpretation 
+of the stored information.
+
+\subsection{The Expansion Procedure}
+
+To double the table from $2^q$ to $2^{q+1}$ slots:
+
+\begin{enumerate}
+  \item \textbf{Move the split point}: the quotient grows from $q$ bits 
+        to $q + 1$ bits, and the remainder shrinks from $r$ bits to 
+        $r - 1$ bits.
+  \item \textbf{Redistribute entries}: for each stored remainder, the 
+        topmost bit of the old remainder becomes part of the new quotient. 
+        If this bit is 0, the entry stays in its current slot. If it is 
+        1, the entry moves to the corresponding slot in the new (upper) 
+        half of the table.
+  \item \textbf{Truncate remainders}: remove the top bit from each 
+        remainder, since it is now part of the quotient.
+\end{enumerate}
+
+\begin{examplebox}[Expansion Step by Step]
+Before expansion ($q = 3$, $r = 5$, table has $2^3 = 8$ slots):
+\[
+  h(\texttt{"hello"}) = \underbrace{101}_{\text{quotient}} 
+                         \underbrace{10101}_{\text{remainder}}
+  \quad \rightarrow \text{slot } 5, \text{ store } \rem{10101}
+\]
+
+After expansion ($q = 4$, $r = 4$, table has $2^4 = 16$ slots):
+\[
+  h(\texttt{"hello"}) = \underbrace{1011}_{\text{new quotient}} 
+                         \underbrace{0101}_{\text{new remainder}}
+  \quad \rightarrow \text{slot } 11, \text{ store } \rem{0101}
+\]
+
+The hash \texttt{10110101} did not change. We simply read one more bit 
+as part of the quotient. The top bit of the old remainder (\texttt{1}) 
+became the new lowest bit of the quotient, changing the slot from 
+$\texttt{101}_2 = 5$ to $\texttt{1011}_2 = 11$.
+\end{examplebox}
+
+% ---- Diagram: Expansion ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    % BEFORE: show the hash split
+    \node[lbl, font=\bfseries] at (-2.5, 2.5) {Before ($q = 3$, $r = 5$):};
+    
+    \node[font=\small\ttfamily] at (-1.5, 1.7) {$h(x) =$};
+    \foreach \i/\val in {0/1, 1/0, 2/1} {
+      \node[bit, fill=AccentTeal!20] at (\i*0.5, 1.7) {\val};
+    }
+    \foreach \i/\val in {3/1, 4/0, 5/1, 6/0, 7/1} {
+      \node[bit, fill=AccentOrange!20] at (\i*0.5, 1.7) {\val};
+    }
+    \draw[brace] (0*0.5-0.2, 2.15) -- (2*0.5+0.2, 2.15)
+      node[midway, above=10pt, font=\scriptsize, text=AccentTeal] {$q$: slot 5};
+    \draw[brace] (3*0.5-0.2, 2.15) -- (7*0.5+0.2, 2.15)
+      node[midway, above=10pt, font=\scriptsize, text=AccentOrange] 
+      {$r$: \rem{10101}};
+    
+    % Arrow
+    \draw[arrow, thick, AccentBlue] (2, 1.0) -- (2, 0.3)
+  node[midway, right=4pt, font=\small, align=left] {steals 1 bit\\from r to q};
+
+    
+    % AFTER: new split
+    \node[lbl, font=\bfseries] at (-2.5, -0.2) {After ($q = 4$, $r = 4$):};
+    
+    \node[font=\small\ttfamily] at (-1.5, -1.0) {$h(x) =$};
+    \foreach \i/\val in {0/1, 1/0, 2/1, 3/1} {
+      \node[bit, fill=AccentTeal!20] at (\i*0.5, -1.0) {\val};
+    }
+    \foreach \i/\val in {4/0, 5/1, 6/0, 7/1} {
+      \node[bit, fill=AccentOrange!20] at (\i*0.5, -1.0) {\val};
+    }
+    \draw[brace] (0*0.5-0.2, -0.55) -- (3*0.5+0.2, -0.55)
+      node[midway, above=10pt, font=\scriptsize, text=AccentTeal] 
+      {$q$: slot 11};
+    \draw[brace] (4*0.5-0.2, -0.55) -- (7*0.5+0.2, -0.55)
+      node[midway, above=10pt, font=\scriptsize, text=AccentOrange] 
+      {$r$: \rem{0101}};
+    
+    % Highlight the stolen bit
+    \draw[AccentRed, very thick, rounded corners=2pt] 
+      (3*0.5-0.22, 1.7-0.28) rectangle (3*0.5+0.22, 1.7+0.28);
+    \draw[AccentRed, very thick, rounded corners=2pt] 
+      (3*0.5-0.22, -1.0-0.28) rectangle (3*0.5+0.22, -1.0+0.28);
+    \draw[arrow, AccentRed, dashed] (3*0.5+0.3, 1.42) -- (3*0.5+0.3, -0.72);
+    
+    % Summary
+    \node[lbl, align=left, font=\small] at (6.5, 0.5) {
+      Same hash: \texttt{10110101}\\
+      Slot: $5 \rightarrow 11$\\
+      Remainder: 5 bits $\rightarrow$ 4 bits\\
+      No original key needed!
+    };
+  \end{tikzpicture}
+  \caption{Expansion moves the split point one bit to the right. The top 
+           bit of the old remainder (highlighted) becomes the new lowest 
+           bit of the quotient. The hash itself is unchanged.}
+  \label{fig:expansion-split}
+\end{figure}
+
+% ---- Diagram: Table before and after ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[node distance=0pt]
+    % BEFORE expansion
+    \node[lbl, font=\bfseries] at (1.5, 1.8) {Before Expansion (8 slots)};
+    
+    \foreach \i/\fp in {0/, 1/, 2/, 3/\rem{00110}, 4/, 
+                        5/\rem{10101}, 6/\rem{11010}, 7/} {
+      \ifx\fp\empty
+        \node[emptyslot, minimum width=1.3cm] (a\i) at (\i*1.4, 1) {};
+      \else
+        \node[fullslot, minimum width=1.3cm] (a\i) at (\i*1.4, 1) {\fp};
+      \fi
+      \node[font=\tiny, text=MedGray] at (\i*1.4, 0.45) {\i};
+    }
+    
+    % Arrow down
+\begin{scope}[yshift=-10pt]
+  \draw[arrow, thick, AccentBlue] (4.9, 0.5) -- (4.9, -0.5) 
+    node[midway, right, font=\small] 
+    {expand: steal 1 bit from each remainder};
+\end{scope}    
+    % AFTER expansion (16 slots, show only relevant ones)
+  \begin{scope}[yshift=-10pt]
+     \node[lbl, font=\bfseries] at (4.5, -1.0) {After Expansion (16 slots)};
+    
+    \foreach \i/\fp in {0/, 1/, 2/, 3/, 4/, 5/, 6/\rem{0110}, 
+                        7/, 8/, 9/, 10/, 11/\rem{0101}, 
+                        12/, 13/\rem{1010}} {
+      \ifx\fp\empty
+        \node[emptyslot, minimum width=0.75cm] (b\i) at (\i*0.8, -1.8) {};
+      \else
+        \node[fullslot, minimum width=0.75cm] (b\i) at (\i*0.8, -1.8) {\fp};
+      \fi
+      \node[font=\tiny, text=MedGray] at (\i*0.8, -2.35) {\i};
+    }
+    
+    \node[lbl, align=center] at (4.5, -3.1) {
+      Remainders shrink: 5 bits $\rightarrow$ 4 bits.
+      Entries redistribute across doubled table.
+    };
+  \end{scope}
+  \end{tikzpicture}
+  \caption{Quotient filter expansion: the table doubles from 8 to 16 
+           slots. Each remainder loses its top bit to the quotient.
+           \texttt{"hello"} moves from slot 5 to slot 11; 
+           \texttt{"cat"} moves from slot 6 to slot 13.}
+  \label{fig:expansion}
+\end{figure}
+
+\begin{insightbox}[Why This Works Without Original Keys]
+The expansion procedure never needs the original element $x$ or the 
+full hash $\text{hash}(x)$. It only needs the \emph{quotient} (known 
+from the slot position) and the \emph{remainder} (stored in the slot). 
+Together these reconstruct the full $p$-bit hash, which can then be 
+re-split at the new position. This is the fundamental advantage of 
+quotienting over the cuckoo filter's modulo-based addressing.
+\end{insightbox}
+
+
+\section{The Void Entry Problem}
+
+Expansion comes at a cost: each time the table doubles, every remainder 
+loses one bit. For an entry that was present at the very first expansion 
+and survives through $X$ expansions, its remainder shrinks from $r$ bits 
+to $r - X$ bits.
+
+\subsection{How Void Entries Arise}
+
+Consider an entry inserted with an initial remainder of $r = 5$ bits. 
+After each expansion, the top bit of its remainder is consumed by the 
+growing quotient:
+
+% ---- Diagram: Void entry formation ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    \node[lbl, font=\bfseries] at (-2.5, 1) {Expansion};
+    \node[lbl, font=\bfseries] at (1.5, 1) {Remainder};
+    \node[lbl, font=\bfseries] at (4.5, 1) {Bits left};
+    
+    % Row 0
+    \node[lbl] at (-2.5, 0) {0 (initial)};
+    \node[bit, fill=BitOne] at (0.5, 0) {1};
+    \node[bit, fill=BitOne] at (1.0, 0) {0};
+    \node[bit, fill=BitOne] at (1.5, 0) {1};
+    \node[bit, fill=BitOne] at (2.0, 0) {0};
+    \node[bit, fill=BitOne] at (2.5, 0) {1};
+    \node[lbl] at (4.5, 0) {5};
+    
+    % Row 1
+    \node[lbl] at (-2.5, -0.8) {1};
+    \node[bit, fill=BitOne] at (1.0, -0.8) {0};
+    \node[bit, fill=BitOne] at (1.5, -0.8) {1};
+    \node[bit, fill=BitOne] at (2.0, -0.8) {0};
+    \node[bit, fill=BitOne] at (2.5, -0.8) {1};
+    \node[bit, fill=BitZero, opacity=0.3] at (0.5, -0.8) {};
+    \node[lbl] at (4.5, -0.8) {4};
+    
+    % Row 2
+    \node[lbl] at (-2.5, -1.6) {2};
+    \node[bit, fill=BitOne] at (1.5, -1.6) {1};
+    \node[bit, fill=BitOne] at (2.0, -1.6) {0};
+    \node[bit, fill=BitOne] at (2.5, -1.6) {1};
+    \node[bit, fill=BitZero, opacity=0.3] at (0.5, -1.6) {};
+    \node[bit, fill=BitZero, opacity=0.3] at (1.0, -1.6) {};
+    \node[lbl] at (4.5, -1.6) {3};
+    
+    % Row 3
+    \node[lbl] at (-2.5, -2.4) {3};
+    \node[bit, fill=BitOne] at (2.0, -2.4) {0};
+    \node[bit, fill=BitOne] at (2.5, -2.4) {1};
+    \node[bit, fill=BitZero, opacity=0.3] at (0.5, -2.4) {};
+    \node[bit, fill=BitZero, opacity=0.3] at (1.0, -2.4) {};
+    \node[bit, fill=BitZero, opacity=0.3] at (1.5, -2.4) {};
+    \node[lbl] at (4.5, -2.4) {2};
+    
+    % Row 4
+    \node[lbl] at (-2.5, -3.2) {4};
+    \node[bit, fill=BitOne] at (2.5, -3.2) {1};
+    \node[bit, fill=BitZero, opacity=0.3] at (0.5, -3.2) {};
+    \node[bit, fill=BitZero, opacity=0.3] at (1.0, -3.2) {};
+    \node[bit, fill=BitZero, opacity=0.3] at (1.5, -3.2) {};
+    \node[bit, fill=BitZero, opacity=0.3] at (2.0, -3.2) {};
+    \node[lbl] at (4.5, -3.2) {1};
+    
+    % Row 5 — VOID
+    \node[lbl, text=AccentRed, font=\bfseries] at (-2.5, -4.0) {5};
+    \node[bit, fill=VoidColor] at (0.5, -4.0) {?};
+    \node[bit, fill=VoidColor] at (1.0, -4.0) {?};
+    \node[bit, fill=VoidColor] at (1.5, -4.0) {?};
+    \node[bit, fill=VoidColor] at (2.0, -4.0) {?};
+    \node[bit, fill=VoidColor] at (2.5, -4.0) {?};
+    \node[lbl, text=AccentRed, font=\bfseries] at (4.5, -4.0) {0 = \void{}};
+    
+    % Arrow
+    \draw[arrow, AccentRed, very thick] (5.5, -4.0) -- (7.5, -4.0) 
+      node[right, font=\small, text=AccentRed, align=left] {
+        No fingerprint bits left!\\
+        Matches \textbf{any} query\\
+        $\rightarrow$ 100\% false positive};
+  \end{tikzpicture}
+  \caption{A remainder shrinks by one bit per expansion. After $r$ 
+           expansions, zero bits remain, the entry becomes \void{}.}
+  \label{fig:void-formation}
+\end{figure}
+
+\begin{definitionbox}[Void Entry]
+A \textbf{void entry} is an entry whose remainder has been reduced to 
+zero bits through repeated expansions. Since there is no fingerprint 
+left to compare against, a void entry matches \emph{every} query to 
+its slot, producing a guaranteed false positive. Formally, if an entry 
+was created with remainder length $r$ and has survived $X \geq r$ 
+expansions, its current remainder length is $\max(0, r - X) = 0$.
+\end{definitionbox}
+
+\subsection{The Expansion Dilemma}
+
+Void entries create a specific problem during expansion. When the table 
+doubles, each entry moves to one of two possible slots in the new table, determined by the top bit of its current remainder. But a void entry 
+has \emph{no remaining bits}. Without a bit to read, the filter cannot 
+determine which of the two new slots the entry belongs in:
+
+% ---- Diagram: Void entry expansion problem ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    % Before
+    \node[lbl, font=\bfseries] at (1.5, 2) {Before expansion (8 slots)};
+    \foreach \i in {0,...,7} {
+      \node[emptyslot, minimum width=0.9cm] (a\i) at (\i*1.0, 1.2) {};
+      \node[font=\tiny, text=MedGray] at (\i*1.0, 0.75) {\i};
+    }
+    \node[voidslot, minimum width=0.9cm] at (3*1.0, 1.2) {V};
+    
+    % After
+    \node[lbl, font=\bfseries] at (5, -2.7) {After expansion (16 slots)};
+    \foreach \i in {0,...,15} {
+      \node[emptyslot, minimum width=0.55cm] (b\i) at (\i*0.6, -1.5) {};
+      \node[font=\tiny, text=MedGray] at (\i*0.6, -1.95) {\i};
+    }
+    
+    % Two possible destinations
+    \node[voidslot, minimum width=0.55cm] at (6*0.6, -1.5) {?};
+    \node[voidslot, minimum width=0.55cm] at (7*0.6, -1.5) {?};
+    
+    % Arrows to both
+    \draw[dasharrow, AccentRed] (3*1.0, 0.85) -- (6*0.6, -1.15)
+      node[midway, left, xshift=-4pt, font=\scriptsize, text=AccentRed] {bit = 0?};
+    \draw[dasharrow, AccentRed] (3*1.0, 0.85) -- (7*0.6, -1.15)
+      node[midway, right, xshift=4pt, font=\scriptsize, text=AccentRed] {bit = 1?};
+    
+    % Annotation
+    \node[lbl, text=AccentRed, font=\small, align=center] at (12, -0.1) 
+      {No remainder bits left\\to decide which slot!\\\\
+       Slot 6 (if bit was 0)\\or slot 7 (if bit was 1)\\
+       \textbf{We don't know.}};
+  \end{tikzpicture}
+  \caption{A void entry at slot 3 must move to either slot 6 or slot 7 
+           during expansion, but with zero remainder bits, there is no 
+           information to determine which. This is the core problem that 
+           InfiniFilter and the Aleph Filter each solve differently.}
+  \label{fig:void-expansion}
+\end{figure}
+
+\subsection{InfiniFilter's Approach: Secondary Tables}
+
+InfiniFilter \cite{infinifilter} solves this by placing void entries into 
+\textbf{secondary hash tables}, one per expansion level. When an entry 
+becomes void, it is moved to a secondary table that stores enough 
+additional hash bits to track its position.
+
+However, this means that queries for non-existent or old keys must 
+now search the main table \emph{and} all secondary tables:
+
+% ---- Diagram: InfiniFilter multi-table query ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    % Main table
+    \node[lbl, font=\bfseries] at (-1.5, 0) {Main table};
+    \foreach \i in {0,...,7} {
+      \node[emptyslot, minimum width=0.7cm] (m\i) at (\i*0.8, -0.7) {};
+    }
+    
+    % Secondary table 1
+    \node[lbl, font=\bfseries] at (-1.5, -1.8) {Secondary 1};
+    \foreach \i in {0,...,3} {
+      \node[emptyslot, minimum width=0.7cm, fill=orange!8] 
+        (s\i) at (\i*0.8, -2.5) {};
+    }
+    
+    % Secondary table 2
+    \node[lbl, font=\bfseries] at (-1.5, -3.6) {Secondary 2};
+    \foreach \i in {0,...,1} {
+      \node[emptyslot, minimum width=0.7cm, fill=red!8] 
+        (t\i) at (\i*0.8, -4.3) {};
+    }
+    
+    % Query path
+    \node[hashbox] (q) at (8, 0) {query $x$};
+    \draw[arrow, AccentBlue] (q.west) -- (m7.east)
+      node[midway, above, yshift=10pt, font=\scriptsize] {check};
+    \draw[dasharrow, AccentRed] (m7.south) -- (s3.north east)
+      node[midway, yshift=-6pt, right, font=\scriptsize, text=AccentRed] {miss};
+    \draw[dasharrow, AccentRed] (s3.south) -- (t1.north east)
+      node[midway, yshift=-6pt, right, font=\scriptsize, text=AccentRed] {miss};
+    
+    % Annotation
+    \node[lbl, text=AccentRed, align=left, font=\small] at (7.5, -3.5) {
+      Must check \textbf{every} table\\
+      Query time: $\bigO{\log N}$\\
+      (one table per expansion)
+    };
+  \end{tikzpicture}
+  \caption{InfiniFilter stores void entries in secondary hash tables. 
+           Queries must search all tables, degrading to $\bigO{\log N}$.}
+  \label{fig:infinifilter}
+\end{figure}
+
+With each expansion adding a new secondary table, the number of tables 
+grows as $\bigO{\log N}$ (where $N$ is the total number of insertions). 
+A query that targets a non-existent key or an old key must search every 
+table, giving worst-case $\bigO{\log N}$ query time, a significant 
+degradation from the $\bigO{1}$ queries of the original quotient filter.
+
+\subsection{The Aleph Filter's Solution: Void Duplication}
+
+The Aleph Filter \cite{aleph} takes a fundamentally different approach. 
+Instead of moving void entries to secondary tables, it \textbf{duplicates} 
+each void entry into \emph{both} possible slots during expansion. The two candidate slots in the expanded table are $2q$ and $2q + 1$, 
+corresponding to appending a $0$ or $1$ bit to the old quotient:
+\[
+  q \| 0 = 2q \qquad \text{and} \qquad q \| 1 = 2q + 1
+\]
+where $\|$ denotes bit concatenation. A comparison betwen InfiniFilter and Aleph Filter:
+
+% ---- Diagram: Aleph vs InfiniFilter ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[scale=0.9, every node/.style={transform shape}]
+    % BEFORE
+    \node[lbl, font=\bfseries] at (1.6, 1.5) {Before Expansion};
+    \foreach \i/\content/\style in {0//emptyslot, 1//emptyslot, 
+                                     2//emptyslot, 3/V/voidslot} {
+      \node[\style, minimum width=1cm] (a\i) at (\i*1.2, 0.7) {\content};
+      \node[font=\tiny, text=MedGray] at (\i*1.2, 0.15) {\i};
+    }
+    
+    % Arrow
+    \draw[arrow, very thick, AccentBlue] (2, -0.3) -- (2, -1.0);
+    
+    % AFTER — InfiniFilter
+    \node[lbl, font=\bfseries] at (-3, -1.6) {InfiniFilter:};
+    \foreach \i in {0,...,7} {
+      \node[emptyslot, minimum width=0.8cm] (inf\i) at ({-5+\i*0.9}, -2.3) {};
+    }
+    \node[font=\tiny, text=MedGray] at (-5, -2.8) {0};
+    \node[font=\tiny, text=MedGray] at ({-5+7*0.9}, -2.8) {7};
+    
+    \node[voidslot, minimum width=0.8cm] (sec) at (-3, -3.5) {V};
+    \node[lbl, font=\scriptsize] at (-3, -4.1) {secondary table};
+    \draw[dasharrow, AccentRed] (inf3.south) -- (sec.north);
+    \node[lbl, text=AccentRed, font=\scriptsize, anchor=west] at (0, -3.5) 
+      {Query: $\bigO{\log N}$};
+    
+    % AFTER — Aleph
+    \node[lbl, font=\bfseries] at (5.5, -1.6) {Aleph Filter:};
+    \foreach \i in {0,...,7} {
+      \node[emptyslot, minimum width=0.8cm] (al\i) at ({3+\i*0.9}, -2.3) {};
+    }
+    \node[font=\tiny, text=MedGray] at (3, -2.8) {0};
+    \node[font=\tiny, text=MedGray] at ({3+7*0.9}, -2.8) {7};
+    
+    \node[voidslot, minimum width=0.8cm] at ({3+6*0.9}, -2.3) {V};
+    \node[voidslot, minimum width=0.8cm] at ({3+7*0.9}, -2.3) {V};
+    
+    \draw[brace] ({3+6*0.9-0.35}, -1.7) -- ({3+7*0.9+0.35}, -1.7)
+      node[midway, above=10pt, font=\scriptsize, text=AccentGreen] 
+      {duplicated!};
+    \node[lbl, text=AccentGreen, font=\scriptsize, anchor=west, xshift=10pt] at (9.5, -2.3) 
+      {Query: $\bigO{1}$};
+  \end{tikzpicture}
+  \caption{Aleph Filter duplicates void entries to both possible slots, 
+           keeping queries $\bigO{1}$.}
+  \label{fig:aleph-vs-infini}
+\end{figure}
+
+Since a void entry matches any query to its slot (it has no fingerprint 
+to compare), placing a copy in both candidate slots ensures correctness: 
+regardless of which slot the original element ``should'' have gone to, 
+a copy is there. All entries remain in a single table, so queries never 
+need to search secondary structures.
+
+This is the core innovation of the Aleph Filter, which the next chapter 
+develops in full detail. The complete design addresses three challenges:
+\begin{enumerate}
+  \item \textbf{Void duplication:} keeps queries $\bigO{1}$ by 
+        eliminating secondary tables.
+  \item \textbf{Tombstone-based deletion:} handles the complication that 
+        deleting a duplicated void entry must not remove both copies.
+  \item \textbf{Rejuvenation:} prevents void entries from accumulating 
+        indefinitely by periodically replacing them with fresh 
+        fingerprints.
+\end{enumerate}
+
+\begin{warningbox}[The Complete Filter Evolution]
+\begin{center}
+\begin{tabular}{l c c c c}
+  \hline
+  & \textbf{Delete} & \textbf{Expand} & \textbf{Query} & \textbf{Stable FPR} \\
+  \hline
+  Bloom filter     & \texttimes & \texttimes & $\bigO{k}$       & \texttimes \\
+  Cuckoo filter    & \checkmark & \texttimes & $\bigO{1}$       & \texttimes \\
+  Quotient filter  & \checkmark & \checkmark & $\bigO{1}$*      & \texttimes \\
+  InfiniFilter     & \checkmark & \checkmark & $\bigO{\log N}$  & \checkmark \\
+  \textbf{Aleph Filter} & \checkmark & \checkmark & $\bigO{1}$ & \checkmark \\
+  \hline
+\end{tabular}
+
+\smallskip
+{\small *amortized; degrades at high load factors}
+\end{center}
+Each row solves a limitation of the row above it. The Aleph Filter is 
+the first to achieve all four properties simultaneously.
+\end{warningbox}
+
+
+% ============================================================================
+% CHAPTER 3: THE ALEPH FILTER
+% ============================================================================

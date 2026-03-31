@@ -1,0 +1,85 @@
+\contentsline {chapter}{\numberline {1}Background: Probabilistic Filters}{1}{chapter.1}%
+\contentsline {section}{\numberline {1.1}What Are Filters?}{1}{section.1.1}%
+\contentsline {subsection}{\numberline {1.1.1}Hash Functions and Collisions}{1}{subsection.1.1.1}%
+\contentsline {subsection}{\numberline {1.1.2}The Need for Filters}{1}{subsection.1.1.2}%
+\contentsline {section}{\numberline {1.2}Bloom Filters}{1}{section.1.2}%
+\contentsline {subsection}{\numberline {1.2.1}Structure and Operations}{2}{subsection.1.2.1}%
+\contentsline {subsection}{\numberline {1.2.2}Worked Example}{2}{subsection.1.2.2}%
+\contentsline {subsection}{\numberline {1.2.3}False Positive Rate}{4}{subsection.1.2.3}%
+\contentsline {subsection}{\numberline {1.2.4}Space Efficiency}{6}{subsection.1.2.4}%
+\contentsline {section}{\numberline {1.3}Cuckoo Filters}{6}{section.1.3}%
+\contentsline {subsection}{\numberline {1.3.1}Structure and Operations}{7}{subsection.1.3.1}%
+\contentsline {subsection}{\numberline {1.3.2}Worked Example}{7}{subsection.1.3.2}%
+\contentsline {subsection}{\numberline {1.3.3}From Cuckoo Hashing to Cuckoo Filters}{8}{subsection.1.3.3}%
+\contentsline {subsubsection}{Single-Array Structure and Bucket Positions}{9}{subsubsection*.13}%
+\contentsline {subsubsection}{XOR Symmetry and Eviction}{10}{subsubsection*.16}%
+\contentsline {subsubsection}{Bucket Structure}{11}{subsubsection*.18}%
+\contentsline {subsubsection}{Operations}{11}{subsubsection*.20}%
+\contentsline {subsubsection}{False Positive Rate}{11}{subsubsection*.21}%
+\contentsline {subsubsection}{Space Efficiency}{12}{subsubsection*.22}%
+\contentsline {section}{\numberline {1.4}Summary of Filter Limitations}{12}{section.1.4}%
+\contentsline {chapter}{\numberline {2}Quotient Filters and Expansion}{14}{chapter.2}%
+\contentsline {section}{\numberline {2.1}The Quotienting Idea}{14}{section.2.1}%
+\contentsline {subsection}{\numberline {2.1.1}Worked Example: Insertion}{15}{subsection.2.1.1}%
+\contentsline {section}{\numberline {2.2}Metadata Bits}{15}{section.2.2}%
+\contentsline {subsection}{\numberline {2.2.1}Worked Example: Metadata in Action}{16}{subsection.2.2.1}%
+\contentsline {subsection}{\numberline {2.2.2}Lookup Algorithm}{17}{subsection.2.2.2}%
+\contentsline {section}{\numberline {2.3}How Expansion Works}{17}{section.2.3}%
+\contentsline {subsection}{\numberline {2.3.1}The Expansion Procedure}{18}{subsection.2.3.1}%
+\contentsline {section}{\numberline {2.4}The Void Entry Problem}{19}{section.2.4}%
+\contentsline {subsection}{\numberline {2.4.1}How Void Entries Arise}{19}{subsection.2.4.1}%
+\contentsline {subsection}{\numberline {2.4.2}The Expansion Dilemma}{20}{subsection.2.4.2}%
+\contentsline {subsection}{\numberline {2.4.3}InfiniFilter's Approach: Secondary Tables}{20}{subsection.2.4.3}%
+\contentsline {subsection}{\numberline {2.4.4}The Aleph Filter's Solution: Void Duplication}{21}{subsection.2.4.4}%
+\contentsline {chapter}{\numberline {3}The Aleph Filter}{23}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Overview}{23}{section.3.1}%
+\contentsline {section}{\numberline {3.2}Structure}{23}{section.3.2}%
+\contentsline {subsection}{\numberline {3.2.1}The Mother Hash}{24}{subsection.3.2.1}%
+\contentsline {section}{\numberline {3.3}Void Entry Duplication}{25}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1}Worked Example}{25}{subsection.3.3.1}%
+\contentsline {subsection}{\numberline {3.3.2}Why Duplication Is Correct}{26}{subsection.3.3.2}%
+\contentsline {subsection}{\numberline {3.3.3}How Queries Find Void Entries}{26}{subsection.3.3.3}%
+\contentsline {subsection}{\numberline {3.3.4}Why Duplication Doesn't Explode}{26}{subsection.3.3.4}%
+\contentsline {section}{\numberline {3.4}Constant-Time Queries}{27}{section.3.4}%
+\contentsline {section}{\numberline {3.5}Tombstone-Based Deletes}{28}{section.3.5}%
+\contentsline {subsection}{\numberline {3.5.1}Phase 1: Immediate Tombstone ($\ensuremath {\mathcal {O}(1)}$)}{28}{subsection.3.5.1}%
+\contentsline {subsection}{\numberline {3.5.2}Using the Mother Hash for Duplicate Removal}{29}{subsection.3.5.2}%
+\contentsline {subsection}{\numberline {3.5.3}Phase 2: Deferred Duplicate Removal}{29}{subsection.3.5.3}%
+\contentsline {subsection}{\numberline {3.5.4}Why Delete the Longest Matching Mother Hash?}{30}{subsection.3.5.4}%
+\contentsline {subsection}{\numberline {3.5.5}Computational Cost}{30}{subsection.3.5.5}%
+\contentsline {section}{\numberline {3.6}Rejuvenation}{30}{section.3.6}%
+\contentsline {subsection}{\numberline {3.6.1}Rejuvenation Procedure}{30}{subsection.3.6.1}%
+\contentsline {section}{\numberline {3.7}FPR Analysis}{31}{section.3.7}%
+\contentsline {subsection}{\numberline {3.7.1}Per-Generation FPR}{31}{subsection.3.7.1}%
+\contentsline {subsection}{\numberline {3.7.2}Total FPR}{32}{subsection.3.7.2}%
+\contentsline {subsection}{\numberline {3.7.3}Widening Regime}{32}{subsection.3.7.3}%
+\contentsline {section}{\numberline {3.8}Operating Regimes}{32}{section.3.8}%
+\contentsline {section}{\numberline {3.9}Architecture Summary}{33}{section.3.9}%
+\contentsline {section}{\numberline {3.10}Comparison}{33}{section.3.10}%
+\contentsline {chapter}{\numberline {4}Rust Implementation}{34}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Data Structures}{34}{section.4.1}%
+\contentsline {section}{\numberline {4.2}Operations}{34}{section.4.2}%
+\contentsline {subsection}{\numberline {4.2.1}Insertion}{35}{subsection.4.2.1}%
+\contentsline {subsection}{\numberline {4.2.2}Query}{35}{subsection.4.2.2}%
+\contentsline {subsection}{\numberline {4.2.3}Expansion}{36}{subsection.4.2.3}%
+\contentsline {subsubsection}{Void Entries}{37}{subsubsection*.41}%
+\contentsline {subsection}{\numberline {4.2.4}Deletion}{37}{subsection.4.2.4}%
+\contentsline {subsubsection}{Void Deletion: Our Simplification}{38}{subsubsection*.42}%
+\contentsline {paragraph}{Why we accepted this tradeoff.}{38}{paragraph*.44}%
+\contentsline {section}{\numberline {4.3}Fidelity to the Paper}{39}{section.4.3}%
+\contentsline {subsection}{\numberline {4.3.1}What Matches Exactly}{39}{subsection.4.3.1}%
+\contentsline {subsection}{\numberline {4.3.2}What Does Not Match}{39}{subsection.4.3.2}%
+\contentsline {chapter}{\numberline {5}Comparison and Conclusion}{41}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Benchmark Methodology}{41}{section.5.1}%
+\contentsline {subsection}{\numberline {5.1.1}Experimental Setup}{41}{subsection.5.1.1}%
+\contentsline {subsection}{\numberline {5.1.2}Competing Implementations}{41}{subsection.5.1.2}%
+\contentsline {section}{\numberline {5.2}Feature Comparison}{42}{section.5.2}%
+\contentsline {section}{\numberline {5.3}Throughput Benchmarks}{42}{section.5.3}%
+\contentsline {subsection}{\numberline {5.3.1}Insertion Throughput}{42}{subsection.5.3.1}%
+\contentsline {subsection}{\numberline {5.3.2}Positive Lookup Throughput}{42}{subsection.5.3.2}%
+\contentsline {subsection}{\numberline {5.3.3}Negative Lookup Throughput}{42}{subsection.5.3.3}%
+\contentsline {subsection}{\numberline {5.3.4}Deletion Throughput}{43}{subsection.5.3.4}%
+\contentsline {section}{\numberline {5.4}False Positive Rate}{43}{section.5.4}%
+\contentsline {section}{\numberline {5.5}Expansion Performance}{44}{section.5.5}%
+\contentsline {section}{\numberline {5.6}Conclusion}{44}{section.5.6}%
+\contentsline {section}{\numberline {5.7}Future Work}{45}{section.5.7}%

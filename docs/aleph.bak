@@ -1,0 +1,40 @@
+Meaning that if we use the 
+% ---- Diagram: Single array with two candidate buckets ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    % Array of buckets
+    \foreach \i in {0,...,7} {
+      \node[emptyslot, minimum width=1.1cm] (s\i) at (\i*1.2, 0) {};
+      \node[font=\tiny, text=MedGray] at (\i*1.2, -0.55) {\i};
+    }
+    
+    % Some occupied slots
+    \node[fullslot, minimum width=1.1cm] at (0*1.2, 0) {\fp{0xA3}};
+    \node[fullslot, minimum width=1.1cm] at (3*1.2, 0) {\fp{0x7F}};
+    \node[fullslot, minimum width=1.1cm] at (5*1.2, 0) {\fp{0x12}};
+    
+    % Element being inserted
+    \node[hashbox] (key) at (3.6, 2.2) {element $x$};
+    
+    % Fingerprint computation
+    \node[font=\scriptsize, text=DarkGray] at (3.6, 1.5) 
+      {$\phi(x) = \texttt{0x5B}$};
+    
+    % Two candidate buckets
+    \draw[arrow, AccentBlue, thick] (key.south) -- ++(0, -0.5) -| (s2.north)
+      node[pos=0.75, left, font=\scriptsize, text=AccentBlue] 
+      {$h_1(x) = 2$};
+    \draw[arrow, AccentOrange, thick] (key.south) -- ++(0, -0.5) -| (s6.north)
+      node[pos=0.75, right, font=\scriptsize, text=AccentOrange] 
+      {$h_2(x) = 6$};
+    
+    % Label
+    \node[lbl, font=\small] at (4.2, -1.2) 
+      {Single array $B$: two candidate buckets per element};
+  \end{tikzpicture}
+  \caption{A cuckoo filter stores fingerprints in a single array. Each 
+           element $x$ maps to two candidate buckets $h_1(x)$ and $h_2(x)$ 
+           computed via Equations~\ref{eq:cuckoo-h1}--\ref{eq:cuckoo-h2}.}
+  \label{fig:cuckoo-filter-array}
+\end{figure}

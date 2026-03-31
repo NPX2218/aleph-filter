@@ -1,0 +1,416 @@
+% ============================================================================
+% Aleph Filter: Understanding and Implementation
+% A Technical Report by Neel
+% ============================================================================
+\documentclass[11pt, a4paper]{report}
+
+% === GEOMETRY & LAYOUT ===
+\usepackage[
+  top=1in,
+  bottom=1in,
+  left=1.15in,
+  right=1.15in
+]{geometry}
+
+% === FONTS & ENCODING ===
+\usepackage[T1]{fontenc}
+\usepackage[expansion=false]{microtype}  % Better text justification
+
+% === MATH ===
+\usepackage{amsmath, amssymb, amsthm}
+
+% === COLORS ===
+\usepackage[dvipsnames, svgnames]{xcolor}
+
+% Custom color palette
+\definecolor{AccentBlue}{HTML}{2563EB}
+\definecolor{AccentTeal}{HTML}{0D9488}
+\definecolor{AccentOrange}{HTML}{EA580C}
+\definecolor{AccentRed}{HTML}{DC2626}
+\definecolor{AccentGreen}{HTML}{16A34A}
+\definecolor{LightGray}{HTML}{F8FAFC}
+\definecolor{MedGray}{HTML}{94A3B8}
+\definecolor{DarkGray}{HTML}{334155}
+\definecolor{CodeBg}{HTML}{F1F5F9}
+\definecolor{BitZero}{HTML}{E2E8F0}
+\definecolor{BitOne}{HTML}{BFDBFE}
+\definecolor{VoidColor}{HTML}{FED7AA}
+\definecolor{TombstoneColor}{HTML}{FECACA}
+
+% === HEADERS & FOOTERS ===
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{black}{\leftmark}}
+\fancyhead[R]{\small\textcolor{black}{Aleph Filter}}
+\fancyfoot[C]{\small\textcolor{black}{\thepage}}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% === CHAPTER & SECTION STYLING ===
+\usepackage{titlesec}
+
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries\color{black}}
+  {\chaptertitlename\ \thechapter}{18pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{-20pt}{30pt}
+
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{black}}
+  {\thesection}{1em}{}
+
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{black}}
+  {\thesubsection}{1em}{}
+
+% === HYPERLINKS ===
+\usepackage[
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=black,
+  urlcolor=black
+]{hyperref}
+
+% === FIGURES & CAPTIONS ===
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage[
+  font=small,
+  labelfont=bf,
+  labelsep=period,
+  justification=centering
+]{caption}
+
+% === LISTS ===
+\usepackage{enumitem}
+\setlist[itemize]{topsep=4pt, itemsep=2pt}
+\setlist[enumerate]{topsep=4pt, itemsep=2pt}
+
+% === CODE LISTINGS ===
+\usepackage{listings}
+
+\lstdefinestyle{rust}{
+  language=C,  % Close enough base for Rust
+  basicstyle=\small\ttfamily,
+  backgroundcolor=\color{CodeBg},
+  keywordstyle=\color{AccentBlue}\bfseries,
+  stringstyle=\color{AccentGreen},
+  commentstyle=\color{MedGray}\itshape,
+  numberstyle=\tiny\color{MedGray},
+  numbers=left,
+  numbersep=8pt,
+  breaklines=true,
+  frame=single,
+  framerule=0pt,
+  framexleftmargin=6pt,
+  xleftmargin=14pt,
+  tabsize=4,
+  showstringspaces=false,
+  morekeywords={fn, let, mut, pub, struct, impl, self, Self, use, mod, 
+                 crate, u8, u16, u32, u64, usize, bool, true, false,
+                 Option, Some, None, Vec, String, Result, Ok, Err,
+                 if, else, for, while, loop, match, return, as, const},
+  literate={->}{$\rightarrow$}{2}
+           {=>}{$\Rightarrow$}{2},
+  belowskip=8pt,
+  aboveskip=8pt,
+}
+\lstset{style=rust}
+
+% === ALGORITHMS / PSEUDOCODE ===
+\usepackage[
+  ruled,
+  vlined,
+  linesnumbered
+]{algorithm2e}
+\SetAlgoLined
+\SetKwComment{Comment}{// }{}
+
+% === BOXES & CALLOUTS ===
+\usepackage[most]{tcolorbox}
+
+% Definition box
+\newtcolorbox{definitionbox}[1][]{
+  colback=blue!3,
+  colframe=AccentBlue,
+  coltitle=white,
+  fonttitle=\bfseries,
+  title={#1},
+  arc=2pt,
+  boxrule=1pt,
+  left=8pt, right=8pt, top=6pt, bottom=6pt,
+}
+
+% Key insight box
+\newtcolorbox{insightbox}[1][Key Insight]{
+  colback=teal!3,
+  colframe=AccentTeal,
+  coltitle=white,
+  fonttitle=\bfseries,
+  title={#1},
+  arc=2pt,
+  boxrule=1pt,
+  left=8pt, right=8pt, top=6pt, bottom=6pt,
+}
+
+% Warning / gotcha box
+\newtcolorbox{warningbox}[1][Watch Out]{
+  colback=orange!3,
+  colframe=AccentOrange,
+  coltitle=white,
+  fonttitle=\bfseries,
+  title={#1},
+  arc=2pt,
+  boxrule=1pt,
+  left=8pt, right=8pt, top=6pt, bottom=6pt,
+}
+
+% Example box
+\newtcolorbox{examplebox}[1][Example]{
+  colback=green!2,
+  colframe=AccentGreen,
+  coltitle=white,
+  fonttitle=\bfseries,
+  title={#1},
+  arc=2pt,
+  boxrule=1pt,
+  left=8pt, right=8pt, top=6pt, bottom=6pt,
+}
+
+% === TIKZ (diagrams, arrays, arrows) ===
+\usepackage{tikz}
+\usetikzlibrary{
+  arrows.meta,       % Better arrowheads
+  positioning,       % Relative positioning
+  calc,              % Coordinate calculations
+  decorations.pathreplacing,  % Braces
+  fit,               % Fit nodes around others
+  backgrounds,       % Background layers
+  patterns,          % Fill patterns
+  chains,            % Node chains
+  matrix,            % Matrix of nodes
+  shapes.geometric,  % Extra shapes
+}
+
+% --- CUSTOM TIKZ STYLES ---
+
+% Slot in an array/table
+\tikzstyle{slot} = [
+  draw, 
+  minimum width=1cm, 
+  minimum height=0.7cm,
+  font=\small\ttfamily,
+  inner sep=2pt,
+]
+
+% Empty slot
+\tikzstyle{emptyslot} = [slot, fill=BitZero]
+
+% Occupied slot
+\tikzstyle{fullslot} = [slot, fill=BitOne]
+
+% Void entry slot
+\tikzstyle{voidslot} = [slot, fill=VoidColor]
+
+% Tombstone slot
+\tikzstyle{tombstoneslot} = [slot, fill=TombstoneColor]
+
+% Bit in a bit array (smaller)
+\tikzstyle{bit} = [
+  draw,
+  minimum width=0.5cm,
+  minimum height=0.5cm,
+  font=\small\ttfamily,
+  inner sep=1pt,
+]
+
+% Hash function box
+\tikzstyle{hashbox} = [
+  draw,
+  rounded corners=3pt,
+  fill=AccentBlue!10,
+  minimum width=1.8cm,
+  minimum height=0.7cm,
+  font=\small,
+  text=AccentBlue,
+]
+
+% Label style
+\tikzstyle{lbl} = [font=\small, text=DarkGray]
+
+% Arrow styles
+\tikzstyle{arrow} = [-{Stealth[length=6pt]}, thick]
+\tikzstyle{dualarrow} = [{Stealth[length=6pt]}-{Stealth[length=6pt]}, thick]
+\tikzstyle{dasharrow} = [-{Stealth[length=6pt]}, thick, dashed]
+
+% Brace annotation
+\tikzstyle{brace} = [
+  decorate,
+  decoration={brace, amplitude=6pt, raise=4pt},
+  thick,
+  DarkGray,
+]
+
+% --- CUSTOM COMMANDS ---
+
+% Fingerprint notation
+\newcommand{\fp}[1]{\texttt{\textcolor{AccentBlue}{#1}}}
+
+% Quotient notation
+\newcommand{\quot}[1]{\texttt{\textcolor{AccentTeal}{#1}}}
+
+% Remainder notation
+\newcommand{\rem}[1]{\texttt{\textcolor{AccentOrange}{#1}}}
+
+% Void marker
+\newcommand{\void}{\textcolor{AccentOrange}{\textsc{void}}}
+
+% Tombstone marker
+\newcommand{\tombstone}{\textcolor{AccentRed}{\textsc{tomb}}}
+
+% Big-O notation
+\newcommand{\bigO}[1]{\ensuremath{\mathcal{O}(#1)}}
+
+% False Positive Rate
+\newcommand{\FPR}{\textsf{FPR}}
+
+% Highlight inline
+\newcommand{\hl}[1]{\colorbox{yellow!25}{#1}}
+
+% === THEOREM ENVIRONMENTS ===
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[chapter]
+\newtheorem{theorem}{Theorem}[chapter]
+\newtheorem{lemma}[theorem]{Lemma}
+
+% === TABLE OF CONTENTS DEPTH ===
+\setcounter{tocdepth}{2}
+
+% === BIBLIOGRAPHY ===
+% If you want to use biblatex later, uncomment below and create a .bib file:
+% \usepackage[backend=biber, style=numeric, sorting=none]{biblatex}
+% \addbibresource{references.bib}
+
+% ============================================================================
+% DOCUMENT BEGINS
+% ============================================================================
+\begin{document}
+
+% --- TITLE PAGE ---
+\begin{titlepage}
+  \centering
+  \vspace*{3cm}
+  
+  % Title block
+  {\fontsize{36}{40}\selectfont\bfseries Aleph Filter}\\[0.6cm]
+  {\Large\color{DarkGray} To Infinity in Constant Time}
+  
+  \vspace{0.8cm}
+  \rule{0.4\textwidth}{0.8pt}
+  \vspace{0.8cm}
+  
+  {\large Understanding, Analysis, and Rust Implementation}
+  
+  \vspace{2.5cm}
+  
+  % Author
+  {\Large\bfseries Neel Bansal}\\[0.4cm]
+  {\color{black} \today}
+  
+  \vfill
+  
+  % Bottom box
+  \begin{tcolorbox}[
+    colback=white,
+    colframe=black!30,
+    width=0.8\textwidth,
+    arc=2pt,
+    boxrule=0.4pt,
+    top=10pt, bottom=10pt,
+  ]
+    \centering\small\color{DarkGray}
+    A companion technical report to the first Rust implementation of the 
+    Aleph Filter, based on the VLDB 2024 paper by Dayan, Bercea, and 
+    Pagh.\\[6pt]
+    \texttt{arxiv.org/abs/2404.04703}
+    \quad$\cdot$\quad
+    \texttt{github.com/NPX2218/aleph-filter}
+  \end{tcolorbox}
+  \vspace{1cm}
+  
+\end{titlepage}
+
+% --- TABLE OF CONTENTS ---
+\pagenumbering{roman}
+\tableofcontents
+\newpage
+\pagenumbering{arabic}
+
+
+% ============================================================================
+% CHAPTER 1: BACKGROUND - PROBABILISTIC FILTERS
+% ============================================================================
+\include{chapters/background}
+\include{chapters/quotient-filters-and-expansion}
+\include{chapters/aleph-filter}
+\include{chapters/rust-implementation}
+\include{chapters/comparison-and-conclusion}
+
+% ============================================================================
+% REFERENCES
+% ============================================================================
+% Uncomment when using biblatex:
+% \printbibliography[heading=bibintro, title={References}]
+
+% Manual references for now:
+\begin{thebibliography}{9}
+
+\bibitem{carter}
+  J.~L.~Carter and M.~N.~Wegman,
+  ``Universal Classes of Hash Functions,''
+  \textit{Journal of Computer and System Sciences}, vol.~18, no.~2, 
+  pp.~143--154, 1979.
+  \url{https://doi.org/10.1016/0022-0000(79)90044-8}
+
+\bibitem{bloom}
+  B.~H.~Bloom,
+  ``Space/Time Trade-offs in Hash Coding with Allowable Errors,''
+  \textit{Communications of the ACM}, vol.~13, no.~7, pp.~422--426, 1970.
+  \url{https://dl.acm.org/doi/10.1145/362686.362692}
+
+\bibitem{chrome-bloom}
+  S.~Hess,
+  ``Transition Safe Browsing from Bloom Filter to Prefix Set,''
+  Chromium Code Review 10896048, September 2012.
+  \url{https://codereview.chromium.org/10896048}
+
+\bibitem{mitzenmacher}
+  M.~Mitzenmacher and E.~Upfal,
+  \textit{Probability and Computing: Randomization and Probabilistic 
+  Techniques in Algorithms and Data Analysis},
+  Cambridge University Press, 2nd edition, 2017, pp.~109--111.
+  \url{https://www.cs.purdue.edu/homes/spa/courses/pg17/mu-book.pdf}
+  
+\bibitem{aleph}
+  N.~Dayan, I.-O.~Bercea, and R.~Pagh,
+  ``Aleph Filter: To Infinity in Constant Time,''
+  \textit{Proc. VLDB Endowment}, vol.~17, no.~11, pp.~3644--3656, 2024.
+  \url{https://arxiv.org/abs/2404.04703}
+
+\bibitem{infinifilter}
+  N.~Dayan et al.,
+  ``InfiniFilter: Expanding Filters to Infinity and Beyond,''
+  \textit{SIGMOD}, 2023.
+  
+\bibitem{cuckoo}
+  B.~Fan, D.~G.~Andersen, M.~Kaminsky, and M.~D.~Mitzenmacher,
+  ``Cuckoo Filter: Practically Better Than Bloom,''
+  \textit{CoNEXT}, 2014.
+  \url{https://www.cs.cmu.edu/~dga/papers/cuckoo-conext2014.pdf}
+
+\bibitem{quotient}
+  M.~A.~Bender et al.,
+  ``Don't Thrash: How to Cache Your Hash on Flash,''
+  \textit{PVLDB}, vol.~5, no.~11, 2012.
+\end{thebibliography}
+\end{document}

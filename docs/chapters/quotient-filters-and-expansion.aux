@@ -1,0 +1,84 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\citation{quotient}
+\@writefile{toc}{\contentsline {chapter}{\numberline {2}Quotient Filters and Expansion}{14}{chapter.2}\protected@file@percent }
+\@writefile{lof}{\addvspace {10\p@ }}
+\@writefile{lot}{\addvspace {10\p@ }}
+\@writefile{loa}{\addvspace {10\p@ }}
+\@writefile{toc}{\contentsline {section}{\numberline {2.1}The Quotienting Idea}{14}{section.2.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2.1}{\ignorespaces An 8-bit hash split into a 3-bit quotient (slot address) and 5-bit remainder (stored fingerprint). The table has $2^3 = 8$ slots.}}{14}{figure.caption.25}\protected@file@percent }
+\newlabel{fig:quotienting}{{2.1}{14}{An 8-bit hash split into a 3-bit quotient (slot address) and 5-bit remainder (stored fingerprint). The table has $2^3 = 8$ slots}{figure.caption.25}{}}
+\citation{quotient}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1.1}Worked Example: Insertion}{15}{subsection.2.1.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2.2}{\ignorespaces After inserting \texttt  {"hello"}, \texttt  {"world"}, and \texttt  {"cat"}. Elements with the same quotient form a \textbf  {run} stored in contiguous slots.}}{15}{figure.caption.26}\protected@file@percent }
+\newlabel{fig:quotient-insertion}{{2.2}{15}{After inserting \texttt {"hello"}, \texttt {"world"}, and \texttt {"cat"}. Elements with the same quotient form a \textbf {run} stored in contiguous slots}{figure.caption.26}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.2}Metadata Bits}{15}{section.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2.1}Worked Example: Metadata in Action}{16}{subsection.2.2.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2.3}{\ignorespaces Quotient filter state after inserting \texttt  {"world"} ($q = 3$), \texttt  {"hello"} ($q = 5$), \texttt  {"cat"} ($q = 5$), and \texttt  {"dog"} ($q = 6$). The metadata bits encode run boundaries and shift status.}}{16}{figure.caption.27}\protected@file@percent }
+\newlabel{fig:quotient-metadata}{{2.3}{16}{Quotient filter state after inserting \texttt {"world"} ($q = 3$), \texttt {"hello"} ($q = 5$), \texttt {"cat"} ($q = 5$), and \texttt {"dog"} ($q = 6$). The metadata bits encode run boundaries and shift status}{figure.caption.27}{}}
+\citation{quotient}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2.2}Lookup Algorithm}{17}{subsection.2.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2.3}How Expansion Works}{17}{section.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3.1}The Expansion Procedure}{18}{subsection.2.3.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2.4}{\ignorespaces Expansion moves the split point one bit to the right. The top bit of the old remainder (highlighted) becomes the new lowest bit of the quotient. The hash itself is unchanged.}}{18}{figure.caption.28}\protected@file@percent }
+\newlabel{fig:expansion-split}{{2.4}{18}{Expansion moves the split point one bit to the right. The top bit of the old remainder (highlighted) becomes the new lowest bit of the quotient. The hash itself is unchanged}{figure.caption.28}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2.5}{\ignorespaces Quotient filter expansion: the table doubles from 8 to 16 slots. Each remainder loses its top bit to the quotient. \texttt  {"hello"} moves from slot 5 to slot 11; \texttt  {"cat"} moves from slot 6 to slot 13.}}{19}{figure.caption.29}\protected@file@percent }
+\newlabel{fig:expansion}{{2.5}{19}{Quotient filter expansion: the table doubles from 8 to 16 slots. Each remainder loses its top bit to the quotient. \texttt {"hello"} moves from slot 5 to slot 11; \texttt {"cat"} moves from slot 6 to slot 13}{figure.caption.29}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.4}The Void Entry Problem}{19}{section.2.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4.1}How Void Entries Arise}{19}{subsection.2.4.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2.6}{\ignorespaces A remainder shrinks by one bit per expansion. After $r$ expansions, zero bits remain, the entry becomes \textcolor {AccentOrange}{\textsc  {void}}{}.}}{19}{figure.caption.30}\protected@file@percent }
+\newlabel{fig:void-formation}{{2.6}{19}{A remainder shrinks by one bit per expansion. After $r$ expansions, zero bits remain, the entry becomes \void {}}{figure.caption.30}{}}
+\citation{infinifilter}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4.2}The Expansion Dilemma}{20}{subsection.2.4.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2.7}{\ignorespaces A void entry at slot 3 must move to either slot 6 or slot 7 during expansion, but with zero remainder bits, there is no information to determine which. This is the core problem that InfiniFilter and the Aleph Filter each solve differently.}}{20}{figure.caption.31}\protected@file@percent }
+\newlabel{fig:void-expansion}{{2.7}{20}{A void entry at slot 3 must move to either slot 6 or slot 7 during expansion, but with zero remainder bits, there is no information to determine which. This is the core problem that InfiniFilter and the Aleph Filter each solve differently}{figure.caption.31}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4.3}InfiniFilter's Approach: Secondary Tables}{20}{subsection.2.4.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2.8}{\ignorespaces InfiniFilter stores void entries in secondary hash tables. Queries must search all tables, degrading to $\ensuremath  {\mathcal  {O}(\log N)}$.}}{20}{figure.caption.32}\protected@file@percent }
+\newlabel{fig:infinifilter}{{2.8}{20}{InfiniFilter stores void entries in secondary hash tables. Queries must search all tables, degrading to $\bigO {\log N}$}{figure.caption.32}{}}
+\citation{aleph}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4.4}The Aleph Filter's Solution: Void Duplication}{21}{subsection.2.4.4}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2.9}{\ignorespaces Aleph Filter duplicates void entries to both possible slots, keeping queries $\ensuremath  {\mathcal  {O}(1)}$.}}{21}{figure.caption.33}\protected@file@percent }
+\newlabel{fig:aleph-vs-infini}{{2.9}{21}{Aleph Filter duplicates void entries to both possible slots, keeping queries $\bigO {1}$}{figure.caption.33}{}}
+\@setckpt{chapters/quotient-filters-and-expansion}{
+\setcounter{page}{23}
+\setcounter{equation}{0}
+\setcounter{enumi}{3}
+\setcounter{enumii}{0}
+\setcounter{enumiii}{0}
+\setcounter{enumiv}{0}
+\setcounter{footnote}{0}
+\setcounter{mpfootnote}{0}
+\setcounter{part}{0}
+\setcounter{chapter}{2}
+\setcounter{section}{4}
+\setcounter{subsection}{4}
+\setcounter{subsubsection}{0}
+\setcounter{paragraph}{0}
+\setcounter{subparagraph}{0}
+\setcounter{figure}{9}
+\setcounter{table}{0}
+\setcounter{parentequation}{0}
+\setcounter{section@level}{0}
+\setcounter{Item}{33}
+\setcounter{Hfootnote}{0}
+\setcounter{bookmark@seq@number}{27}
+\setcounter{float@type}{16}
+\setcounter{caption@flags}{2}
+\setcounter{continuedfloat}{0}
+\setcounter{lstnumber}{1}
+\setcounter{AlgoLine}{0}
+\setcounter{algocfline}{0}
+\setcounter{algocfproc}{0}
+\setcounter{algocf}{0}
+\setcounter{tcbbreakpart}{1}
+\setcounter{tcblayer}{0}
+\setcounter{tcolorbox@number}{17}
+\setcounter{tcbrastercolumn}{1}
+\setcounter{tcbrasterrow}{1}
+\setcounter{tcbrasternum}{1}
+\setcounter{tcbraster}{0}
+\setcounter{tcblisting}{0}
+\setcounter{definition}{0}
+\setcounter{theorem}{0}
+\setcounter{lstlisting}{0}
+}

@@ -1,0 +1,493 @@
+{
+  "timestamp": "2026-03-30T18:20:16-0700",
+  "system_info": "Darwin Neels-MacBook-Air.local 25.3.0 Darwin Kernel Version 25.3.0: Wed Jan 28 20:54:55 PST 2026; root:xnu-12377.91.3~2/RELEASE_ARM64_T8132 arm64",
+  "rust_version": "0.1.0",
+  "benchmarks": [
+    {
+      "filter": "Aleph",
+      "operation": "insert",
+      "n": 1000,
+      "total_ns": 11750,
+      "per_op_ns": 11.75,
+      "ops_per_sec": 85106382.9787234
+    },
+    {
+      "filter": "Bloom",
+      "operation": "insert",
+      "n": 1000,
+      "total_ns": 23167,
+      "per_op_ns": 23.167,
+      "ops_per_sec": 43164846.54897051
+    },
+    {
+      "filter": "Cuckoo",
+      "operation": "insert",
+      "n": 1000,
+      "total_ns": 194667,
+      "per_op_ns": 194.667,
+      "ops_per_sec": 5136977.505175505
+    },
+    {
+      "filter": "Xor8",
+      "operation": "build",
+      "n": 1000,
+      "total_ns": 11500,
+      "per_op_ns": 11.5,
+      "ops_per_sec": 86956521.73913044
+    },
+    {
+      "filter": "Aleph",
+      "operation": "lookup_positive",
+      "n": 1000,
+      "total_ns": 9584,
+      "per_op_ns": 9.584,
+      "ops_per_sec": 104340567.61268781
+    },
+    {
+      "filter": "Bloom",
+      "operation": "lookup_positive",
+      "n": 1000,
+      "total_ns": 16459,
+      "per_op_ns": 16.459,
+      "ops_per_sec": 60757032.62652652
+    },
+    {
+      "filter": "Cuckoo",
+      "operation": "lookup_positive",
+      "n": 1000,
+      "total_ns": 30333,
+      "per_op_ns": 30.333,
+      "ops_per_sec": 32967395.246101607
+    },
+    {
+      "filter": "Xor8",
+      "operation": "lookup_positive",
+      "n": 1000,
+      "total_ns": 2167,
+      "per_op_ns": 2.167,
+      "ops_per_sec": 461467466.5436087
+    },
+    {
+      "filter": "Aleph",
+      "operation": "lookup_negative",
+      "n": 1000,
+      "total_ns": 11584,
+      "per_op_ns": 11.584,
+      "ops_per_sec": 86325966.85082874
+    },
+    {
+      "filter": "Bloom",
+      "operation": "lookup_negative",
+      "n": 1000,
+      "total_ns": 30500,
+      "per_op_ns": 30.5,
+      "ops_per_sec": 32786885.24590164
+    },
+    {
+      "filter": "Cuckoo",
+      "operation": "lookup_negative",
+      "n": 1000,
+      "total_ns": 19666,
+      "per_op_ns": 19.666,
+      "ops_per_sec": 50849181.32818062
+    },
+    {
+      "filter": "Xor8",
+      "operation": "lookup_negative",
+      "n": 1000,
+      "total_ns": 2125,
+      "per_op_ns": 2.125,
+      "ops_per_sec": 470588235.2941176
+    },
+    {
+      "filter": "Aleph",
+      "operation": "delete",
+      "n": 1000,
+      "total_ns": 7167,
+      "per_op_ns": 7.167,
+      "ops_per_sec": 139528394.02818474
+    },
+    {
+      "filter": "Cuckoo",
+      "operation": "delete",
+      "n": 1000,
+      "total_ns": 73042,
+      "per_op_ns": 73.042,
+      "ops_per_sec": 13690753.265244653
+    },
+    {
+      "filter": "Aleph",
+      "operation": "insert",
+      "n": 10000,
+      "total_ns": 125042,
+      "per_op_ns": 12.5042,
+      "ops_per_sec": 79973129.02864636
+    },
+    {
+      "filter": "Bloom",
+      "operation": "insert",
+      "n": 10000,
+      "total_ns": 201167,
+      "per_op_ns": 20.1167,
+      "ops_per_sec": 49709942.48559654
+    },
+    {
+      "filter": "Cuckoo",
+      "operation": "insert",
+      "n": 10000,
+      "total_ns": 339542,
+      "per_op_ns": 33.9542,
+      "ops_per_sec": 29451437.52466558
+    },
+    {
+      "filter": "Xor8",
+      "operation": "build",
+      "n": 10000,
+      "total_ns": 115083,
+      "per_op_ns": 11.5083,
+      "ops_per_sec": 86893807.07836953
+    },
+    {
+      "filter": "Aleph",
+      "operation": "lookup_positive",
+      "n": 10000,
+      "total_ns": 158750,
+      "per_op_ns": 15.875,
+      "ops_per_sec": 62992125.98425197
+    },
+    {
+      "filter": "Bloom",
+      "operation": "lookup_positive",
+      "n": 10000,
+      "total_ns": 208792,
+      "per_op_ns": 20.8792,
+      "ops_per_sec": 47894555.346948154
+    },
+    {
+      "filter": "Cuckoo",
+      "operation": "lookup_positive",
+      "n": 10000,
+      "total_ns": 311292,
+      "per_op_ns": 31.1292,
+      "ops_per_sec": 32124179.227220744
+    },
+    {
+      "filter": "Xor8",
+      "operation": "lookup_positive",
+      "n": 10000,
+      "total_ns": 17625,
+      "per_op_ns": 1.7625,
+      "ops_per_sec": 567375886.5248227
+    },
+    {
+      "filter": "Aleph",
+      "operation": "lookup_negative",
+      "n": 10000,
+      "total_ns": 124083,
+      "per_op_ns": 12.4083,
+      "ops_per_sec": 80591217.1691529
+    },
+    {
+      "filter": "Bloom",
+      "operation": "lookup_negative",
+      "n": 10000,
+      "total_ns": 264834,
+      "per_op_ns": 26.4834,
+      "ops_per_sec": 37759502.178723276
+    },
+    {
+      "filter": "Cuckoo",
+      "operation": "lookup_negative",
+      "n": 10000,
+      "total_ns": 167000,
+      "per_op_ns": 16.7,
+      "ops_per_sec": 59880239.52095809
+    },
+    {
+      "filter": "Xor8",
+      "operation": "lookup_negative",
+      "n": 10000,
+      "total_ns": 17459,
+      "per_op_ns": 1.7459,
+      "ops_per_sec": 572770490.8643106
+    },
+    {
+      "filter": "Aleph",
+      "operation": "delete",
+      "n": 10000,
+      "total_ns": 136958,
+      "per_op_ns": 13.6958,
+      "ops_per_sec": 73015084.91654375
+    },
+    {
+      "filter": "Cuckoo",
+      "operation": "delete",
+      "n": 10000,
+      "total_ns": 283500,
+      "per_op_ns": 28.35,
+      "ops_per_sec": 35273368.60670194
+    },
+    {
+      "filter": "Aleph",
+      "operation": "insert",
+      "n": 100000,
+      "total_ns": 1495209,
+      "per_op_ns": 14.95209,
+      "ops_per_sec": 66880282.288295485
+    },
+    {
+      "filter": "Bloom",
+      "operation": "insert",
+      "n": 100000,
+      "total_ns": 1857875,
+      "per_op_ns": 18.57875,
+      "ops_per_sec": 53824934.4008612
+    },
+    {
+      "filter": "Cuckoo",
+      "operation": "insert",
+      "n": 100000,
+      "total_ns": 3510292,
+      "per_op_ns": 35.10292,
+      "ops_per_sec": 28487658.576551467
+    },
+    {
+      "filter": "Xor8",
+      "operation": "build",
+      "n": 100000,
+      "total_ns": 1629042,
+      "per_op_ns": 16.29042,
+      "ops_per_sec": 61385771.51479212
+    },
+    {
+      "filter": "Aleph",
+      "operation": "lookup_positive",
+      "n": 100000,
+      "total_ns": 2907375,
+      "per_op_ns": 29.07375,
+      "ops_per_sec": 34395287.845565155
+    },
+    {
+      "filter": "Bloom",
+      "operation": "lookup_positive",
+      "n": 100000,
+      "total_ns": 1968791,
+      "per_op_ns": 19.68791,
+      "ops_per_sec": 50792593.01774541
+    },
+    {
+      "filter": "Cuckoo",
+      "operation": "lookup_positive",
+      "n": 100000,
+      "total_ns": 3163625,
+      "per_op_ns": 31.63625,
+      "ops_per_sec": 31609308.941483267
+    },
+    {
+      "filter": "Xor8",
+      "operation": "lookup_positive",
+      "n": 100000,
+      "total_ns": 173959,
+      "per_op_ns": 1.73959,
+      "ops_per_sec": 574848096.3905288
+    },
+    {
+      "filter": "Aleph",
+      "operation": "lookup_negative",
+      "n": 100000,
+      "total_ns": 2055500,
+      "per_op_ns": 20.555,
+      "ops_per_sec": 48649963.51252737
+    },
+    {
+      "filter": "Bloom",
+      "operation": "lookup_negative",
+      "n": 100000,
+      "total_ns": 2470625,
+      "per_op_ns": 24.70625,
+      "ops_per_sec": 40475588.16089046
+    },
+    {
+      "filter": "Cuckoo",
+      "operation": "lookup_negative",
+      "n": 100000,
+      "total_ns": 1688209,
+      "per_op_ns": 16.88209,
+      "ops_per_sec": 59234372.04753676
+    },
+    {
+      "filter": "Xor8",
+      "operation": "lookup_negative",
+      "n": 100000,
+      "total_ns": 171708,
+      "per_op_ns": 1.71708,
+      "ops_per_sec": 582384047.3361754
+    },
+    {
+      "filter": "Aleph",
+      "operation": "insert_with_expansion",
+      "n": 50000,
+      "total_ns": 9213291,
+      "per_op_ns": 184.26582,
+      "ops_per_sec": 5426942.446515583
+    }
+  ],
+  "fpr_results": [
+    {
+      "filter": "Aleph",
+      "n": 1000,
+      "target_fpr": 0.01,
+      "actual_fpr": 0.00392,
+      "false_positives": 392,
+      "total_queries": 100000
+    },
+    {
+      "filter": "Bloom",
+      "n": 1000,
+      "target_fpr": 0.01,
+      "actual_fpr": 0.01042,
+      "false_positives": 1042,
+      "total_queries": 100000
+    },
+    {
+      "filter": "Cuckoo",
+      "n": 1000,
+      "target_fpr": 0.01,
+      "actual_fpr": 0.02984,
+      "false_positives": 2984,
+      "total_queries": 100000
+    },
+    {
+      "filter": "Xor8",
+      "n": 1000,
+      "target_fpr": 0.01,
+      "actual_fpr": 0.00421,
+      "false_positives": 421,
+      "total_queries": 100000
+    },
+    {
+      "filter": "Aleph",
+      "n": 10000,
+      "target_fpr": 0.01,
+      "actual_fpr": 0.00434,
+      "false_positives": 434,
+      "total_queries": 100000
+    },
+    {
+      "filter": "Bloom",
+      "n": 10000,
+      "target_fpr": 0.01,
+      "actual_fpr": 0.00991,
+      "false_positives": 991,
+      "total_queries": 100000
+    },
+    {
+      "filter": "Cuckoo",
+      "n": 10000,
+      "target_fpr": 0.01,
+      "actual_fpr": 0.01983,
+      "false_positives": 1983,
+      "total_queries": 100000
+    },
+    {
+      "filter": "Xor8",
+      "n": 10000,
+      "target_fpr": 0.01,
+      "actual_fpr": 0.00387,
+      "false_positives": 387,
+      "total_queries": 100000
+    },
+    {
+      "filter": "Aleph",
+      "n": 100000,
+      "target_fpr": 0.01,
+      "actual_fpr": 0.00623,
+      "false_positives": 623,
+      "total_queries": 100000
+    },
+    {
+      "filter": "Bloom",
+      "n": 100000,
+      "target_fpr": 0.01,
+      "actual_fpr": 0.00997,
+      "false_positives": 997,
+      "total_queries": 100000
+    },
+    {
+      "filter": "Cuckoo",
+      "n": 100000,
+      "target_fpr": 0.01,
+      "actual_fpr": 0.02474,
+      "false_positives": 2474,
+      "total_queries": 100000
+    },
+    {
+      "filter": "Xor8",
+      "n": 100000,
+      "target_fpr": 0.01,
+      "actual_fpr": 0.00411,
+      "false_positives": 411,
+      "total_queries": 100000
+    }
+  ],
+  "memory_results": [
+    {
+      "filter": "Aleph",
+      "n": 10000,
+      "bits_per_item": 117.9648,
+      "notes": "64-bit slot + 8-bit metadata × 16384 slots (load ≈ 61%)"
+    },
+    {
+      "filter": "Bloom",
+      "n": 10000,
+      "bits_per_item": 6.631445067822851,
+      "notes": "Theoretical optimal: -1.44·ln(fpr)"
+    },
+    {
+      "filter": "Cuckoo",
+      "n": 10000,
+      "bits_per_item": 12.0,
+      "notes": "Typical: 12-bit fingerprint, 4 entries/bucket"
+    },
+    {
+      "filter": "Xor8",
+      "n": 10000,
+      "bits_per_item": 9.84,
+      "notes": "8-bit fingerprint × 1.23 overhead factor"
+    }
+  ],
+  "feature_matrix": [
+    {
+      "filter": "Bloom",
+      "supports_insert": true,
+      "supports_delete": false,
+      "supports_expand": false,
+      "stable_fpr": false,
+      "lookup_complexity": "O(k)"
+    },
+    {
+      "filter": "Cuckoo",
+      "supports_insert": true,
+      "supports_delete": true,
+      "supports_expand": false,
+      "stable_fpr": false,
+      "lookup_complexity": "O(1)"
+    },
+    {
+      "filter": "Xor8",
+      "supports_insert": false,
+      "supports_delete": false,
+      "supports_expand": false,
+      "stable_fpr": true,
+      "lookup_complexity": "O(1)"
+    },
+    {
+      "filter": "Aleph",
+      "supports_insert": true,
+      "supports_delete": true,
+      "supports_expand": true,
+      "stable_fpr": true,
+      "lookup_complexity": "O(1)*"
+    }
+  ]
+}

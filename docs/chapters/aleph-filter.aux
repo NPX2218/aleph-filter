@@ -1,0 +1,126 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\citation{infinifilter}
+\citation{aleph}
+\citation{infinifilter}
+\citation{aleph}
+\@writefile{toc}{\contentsline {chapter}{\numberline {3}The Aleph Filter}{23}{chapter.3}\protected@file@percent }
+\@writefile{lof}{\addvspace {10\p@ }}
+\@writefile{lot}{\addvspace {10\p@ }}
+\@writefile{loa}{\addvspace {10\p@ }}
+\@writefile{toc}{\contentsline {section}{\numberline {3.1}Overview}{23}{section.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.2}Structure}{23}{section.3.2}\protected@file@percent }
+\citation{infinifilter}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.1}{\ignorespaces The four possible slot states in an Aleph Filter. The unary code is self-delimiting: read 1s until a 0 is encountered, then the remaining bits are the fingerprint. A void entry has no fingerprint; a tombstone is distinguished by an all-1s pattern.}}{24}{figure.caption.34}\protected@file@percent }
+\newlabel{fig:slot-format}{{3.1}{24}{The four possible slot states in an Aleph Filter. The unary code is self-delimiting: read 1s until a 0 is encountered, then the remaining bits are the fingerprint. A void entry has no fingerprint; a tombstone is distinguished by an all-1s pattern}{figure.caption.34}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.1}The Mother Hash}{24}{subsection.3.2.1}\protected@file@percent }
+\newlabel{sec:mother-hash}{{3.2.1}{24}{The Mother Hash}{subsection.3.2.1}{}}
+\citation{infinifilter}
+\citation{aleph}
+\@writefile{toc}{\contentsline {section}{\numberline {3.3}Void Entry Duplication}{25}{section.3.3}\protected@file@percent }
+\newlabel{sec:void-duplication}{{3.3}{25}{Void Entry Duplication}{section.3.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.1}Worked Example}{25}{subsection.3.3.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3.2}{\ignorespaces A void entry at slot 3 is duplicated to slots 6 and 7 during expansion. The filter cannot determine which is correct, so it places a copy in both.}}{25}{figure.caption.35}\protected@file@percent }
+\newlabel{fig:void-dup-example}{{3.2}{25}{A void entry at slot 3 is duplicated to slots 6 and 7 during expansion. The filter cannot determine which is correct, so it places a copy in both}{figure.caption.35}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.3}{\ignorespaces Void duplicates grow exponentially: each expansion doubles every existing copy. However, the table also doubles, so the \emph  {fraction} of void entries remains constant per generation.}}{26}{figure.caption.36}\protected@file@percent }
+\newlabel{fig:void-tree}{{3.3}{26}{Void duplicates grow exponentially: each expansion doubles every existing copy. However, the table also doubles, so the \emph {fraction} of void entries remains constant per generation}{figure.caption.36}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.2}Why Duplication Is Correct}{26}{subsection.3.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.3}How Queries Find Void Entries}{26}{subsection.3.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.4}Why Duplication Doesn't Explode}{26}{subsection.3.3.4}\protected@file@percent }
+\citation{aleph}
+\newlabel{eq:void-fraction}{{3.1}{27}{Why Duplication Doesn't Explode}{equation.3.1}{}}
+\newlabel{eq:total-void-fraction}{{3.2}{27}{Why Duplication Doesn't Explode}{equation.3.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3.4}Constant-Time Queries}{27}{section.3.4}\protected@file@percent }
+\newlabel{sec:constant-queries}{{3.4}{27}{Constant-Time Queries}{section.3.4}{}}
+\citation{infinifilter}
+\citation{aleph}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.4}{\ignorespaces InfiniFilter queries may traverse multiple tables; Aleph Filter queries always access only the main table.}}{28}{figure.caption.37}\protected@file@percent }
+\newlabel{fig:query-comparison}{{3.4}{28}{InfiniFilter queries may traverse multiple tables; Aleph Filter queries always access only the main table}{figure.caption.37}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3.5}Tombstone-Based Deletes}{28}{section.3.5}\protected@file@percent }
+\newlabel{sec:tombstone-deletes}{{3.5}{28}{Tombstone-Based Deletes}{section.3.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5.1}Phase 1: Immediate Tombstone ($\ensuremath  {\mathcal  {O}(1)}$)}{28}{subsection.3.5.1}\protected@file@percent }
+\citation{aleph}
+\citation{aleph}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5.2}Using the Mother Hash for Duplicate Removal}{29}{subsection.3.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5.3}Phase 2: Deferred Duplicate Removal}{29}{subsection.3.5.3}\protected@file@percent }
+\citation{aleph}
+\citation{aleph}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5.4}Why Delete the Longest Matching Mother Hash?}{30}{subsection.3.5.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5.5}Computational Cost}{30}{subsection.3.5.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.6}Rejuvenation}{30}{section.3.6}\protected@file@percent }
+\newlabel{sec:rejuvenation}{{3.6}{30}{Rejuvenation}{section.3.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.6.1}Rejuvenation Procedure}{30}{subsection.3.6.1}\protected@file@percent }
+\citation{aleph}
+\citation{aleph}
+\@writefile{toc}{\contentsline {section}{\numberline {3.7}FPR Analysis}{31}{section.3.7}\protected@file@percent }
+\newlabel{sec:fpr-analysis}{{3.7}{31}{FPR Analysis}{section.3.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.7.1}Per-Generation FPR}{31}{subsection.3.7.1}\protected@file@percent }
+\citation{aleph}
+\citation{aleph}
+\citation{aleph}
+\citation{aleph}
+\citation{aleph}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.7.2}Total FPR}{32}{subsection.3.7.2}\protected@file@percent }
+\newlabel{eq:aleph-fpr-fixed}{{3.3}{32}{Total FPR}{equation.3.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.7.3}Widening Regime}{32}{subsection.3.7.3}\protected@file@percent }
+\newlabel{eq:aleph-fpr-widening}{{3.4}{32}{Widening Regime}{equation.3.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3.8}Operating Regimes}{32}{section.3.8}\protected@file@percent }
+\newlabel{sec:regimes}{{3.8}{32}{Operating Regimes}{section.3.8}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3.1}{\ignorespaces Aleph Filter operating regimes \cite  {aleph}. $N$ is the data size relative to initial capacity, $F$ is the initial fingerprint length, and $N_{est}$ is the estimated final data size.}}{32}{table.caption.38}\protected@file@percent }
+\newlabel{tab:regimes}{{3.1}{32}{Aleph Filter operating regimes \cite {aleph}. $N$ is the data size relative to initial capacity, $F$ is the initial fingerprint length, and $N_{est}$ is the estimated final data size}{table.caption.38}{}}
+\citation{aleph}
+\citation{aleph}
+\citation{bloom}
+\citation{cuckoo}
+\citation{quotient}
+\citation{infinifilter}
+\citation{aleph}
+\@writefile{toc}{\contentsline {section}{\numberline {3.9}Architecture Summary}{33}{section.3.9}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3.5}{\ignorespaces Aleph Filter architecture. Queries access only the main table. The secondary and auxiliary tables store mother hashes for delete and rejuvenation operations. Queues defer duplicate removal to the next expansion.}}{33}{figure.caption.39}\protected@file@percent }
+\newlabel{fig:architecture}{{3.5}{33}{Aleph Filter architecture. Queries access only the main table. The secondary and auxiliary tables store mother hashes for delete and rejuvenation operations. Queues defer duplicate removal to the next expansion}{figure.caption.39}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3.10}Comparison}{33}{section.3.10}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3.2}{\ignorespaces Complete comparison of filter expansion techniques. The Aleph Filter is the first to achieve $\ensuremath  {\mathcal  {O}(1)}$ for all operations while supporting infinite expansion with a stable FPR \cite  {aleph}.}}{33}{table.caption.40}\protected@file@percent }
+\newlabel{tab:full-comparison}{{3.2}{33}{Complete comparison of filter expansion techniques. The Aleph Filter is the first to achieve $\bigO {1}$ for all operations while supporting infinite expansion with a stable FPR \cite {aleph}}{table.caption.40}{}}
+\@setckpt{chapters/aleph-filter}{
+\setcounter{page}{34}
+\setcounter{equation}{4}
+\setcounter{enumi}{7}
+\setcounter{enumii}{0}
+\setcounter{enumiii}{0}
+\setcounter{enumiv}{0}
+\setcounter{footnote}{0}
+\setcounter{mpfootnote}{0}
+\setcounter{part}{0}
+\setcounter{chapter}{3}
+\setcounter{section}{10}
+\setcounter{subsection}{0}
+\setcounter{subsubsection}{0}
+\setcounter{paragraph}{0}
+\setcounter{subparagraph}{0}
+\setcounter{figure}{5}
+\setcounter{table}{2}
+\setcounter{parentequation}{0}
+\setcounter{section@level}{0}
+\setcounter{Item}{67}
+\setcounter{Hfootnote}{0}
+\setcounter{bookmark@seq@number}{52}
+\setcounter{float@type}{16}
+\setcounter{caption@flags}{2}
+\setcounter{continuedfloat}{0}
+\setcounter{lstnumber}{1}
+\setcounter{AlgoLine}{0}
+\setcounter{algocfline}{0}
+\setcounter{algocfproc}{0}
+\setcounter{algocf}{0}
+\setcounter{tcbbreakpart}{1}
+\setcounter{tcblayer}{0}
+\setcounter{tcolorbox@number}{22}
+\setcounter{tcbrastercolumn}{1}
+\setcounter{tcbrasterrow}{1}
+\setcounter{tcbrasternum}{1}
+\setcounter{tcbraster}{0}
+\setcounter{tcblisting}{0}
+\setcounter{definition}{0}
+\setcounter{theorem}{0}
+\setcounter{lstlisting}{0}
+}

@@ -1,0 +1,1266 @@
+
+\chapter{Background: Probabilistic Filters}
+
+\section{What Are Filters?}
+
+\subsection{Hash Functions and Collisions}
+
+Let $U$ denote the universe of all possible elements, and let $S \subseteq U$ 
+with $n = |S|$ denote the set of elements we wish to represent.
+
+A \textbf{hash function} is a deterministic function $h : U \to \{0, 1, \dots, m-1\}$ 
+that maps elements from a universe $U$ (e.g., strings, integers) to a fixed range of 
+$m$ possible values. Determinism means that for any input $x \in U$, repeated 
+evaluations of $h(x)$ always yield the same result.
+
+Because the universe $U$ is typically much larger than the range $m$ 
+(i.e., $|U| \gg m$), multiple distinct inputs can map to the same output. 
+This phenomenon is called a \textbf{collision}: two elements $x \neq y$ such that 
+$h(x) = h(y)$. By the pigeonhole principle, if $|U| > m$, collisions are 
+unavoidable and no hash function can be injective over such a domain.
+
+A "good" hash function distributes outputs approximately uniformly: for a 
+randomly chosen $x \in U$, each value in $\{0, 1, \dots, m-1\}$ should be 
+roughly equally likely. This notion was formalized by \textit{universal hashing} \cite{carter},  which guarantees that for any 
+$x \neq y$, the probability of collision satisfies 
+$\Pr[h(x) = h(y)] \leq 1/m$. This property is essential for the 
+data structures that follow.
+
+\subsection{The Need for Filters}
+
+Many systems store large datasets on slow media (e.g. disk, or across a 
+network). A common operation is checking whether a key $x$ exists in a set $S$ 
+before performing an expensive lookup. If we could cheaply determine that 
+$x \notin S$, we could skip the lookup entirely.
+
+Storing $S$ exactly requires $\Omega(n \log |U|)$ bits for $n = |S|$ elements, 
+which may be prohibitively large. \textbf{Filters} address this by trading 
+exactness for space: they use far less memory by tolerating a small 
+probability of error.
+
+\begin{definitionbox}[Probabilistic Filter]
+A \textbf{filter} is a compact data structure that represents a set $S$ and answers
+
+membership queries: ``Is element $x$ in $S$?'' It can return \textbf{false negatives: never},
+but may return \textbf{false positives} with some bounded probability $\epsilon$.
+\end{definitionbox}
+
+
+\section{Bloom Filters}
+
+A Bloom filter, introduced by Burton Bloom in 1970 \cite{bloom}, is a 
+probabilistic data structure for approximate set membership testing. Given 
+a set $S$, a Bloom filter can answer queries of the form ``Is $x \in S$?'' 
+with a one-sided error:
+
+\begin{itemize}
+  \item If $x \in S$, the filter always returns \textsc{yes} (no false negatives).
+  \item If $x \notin S$, the filter may incorrectly return \textsc{yes} with 
+        probability at most $\epsilon$ (a false positive).
+\end{itemize}
+
+This property made Bloom filters practical in real systems. For example, 
+Google Chrome \cite{chrome-bloom} used a Bloom filter until 2012 to check URLs against a local 
+list of known malicious sites. If the filter returned \textsc{no}, the URL 
+was safe and no further lookup was needed. Only on a \textsc{yes} did the 
+browser perform a more expensive server-side check.
+
+\subsection{Structure and Operations}
+
+A Bloom filter consists of two components
+\begin{enumerate}
+  \item A \textbf{bit array} $B$ of $m$ bits, where:
+  \[
+  B[i] \leftarrow 0 \quad \forall \, i \in \{0, 1, 2, \dots, m-1\}
+\]
+
+  \item A family of $k$ independent hash functions $h_1, h_2, \dots, h_k$, 
+        each mapping elements from the universe $U$ uniformly to 
+        $\{0, 1, \dots, m-1\}$.
+\end{enumerate}
+The Bloom filter also supports the following operations:
+
+\begin{enumerate}
+  \item \textbf{Insertion:} To insert an element $x$ into the filter, compute 
+$h_1(x), h_2(x), \dots, h_k(x)$ and set each corresponding bit to 1:
+\[
+  B[h_i(x)] \leftarrow 1 \quad \forall \, i \in \{1, 2 \dots, k\}
+\]
+\item \textbf{Query:} To test whether an element $x$ is in the set, check 
+whether all $k$ bits are set:
+\[
+  \text{query}(x) = \bigwedge_{i=1}^{k} B[h_i(x)]
+\]
+
+\end{enumerate}
+
+
+
+If any bit $B[h_i(x)] = 0$, then $x$ was never inserted,  this is 
+certain because insertion only sets bits to 1, never back to 0. If all 
+$k$ bits are 1, then either $x$ was inserted, or other insertions 
+happened to set those same bits, which creates a false positive.
+
+\subsection{Worked Example}
+
+Consider a Bloom filter with $m = 10$ bits and $k = 3$ hash functions 
+$h_1, h_2, h_3$. We begin with an empty bit array:
+
+% ---- Step 1: Empty array ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    \foreach \i in {0,...,9} {
+      \node[bit, fill=BitZero] (b\i) at (\i*0.6, 0) {0};
+      \node[font=\tiny, text=MedGray] at (\i*0.6, -0.45) {\i};
+    }
+    \node[lbl, anchor=east] at (-0.5, 0) {$B$:};
+  \end{tikzpicture}
+  \caption{Initial state: all bits set to 0.}
+  \label{fig:bloom-empty}
+\end{figure}
+
+\textbf{Insert ``hello''.} Suppose our hash functions produce:
+\[
+  h_1(\texttt{"hello"}) = 1, \quad 
+  h_2(\texttt{"hello"}) = 4, \quad 
+  h_3(\texttt{"hello"}) = 9
+\]
+We set $B[1], B[4], B[9] \leftarrow 1$:
+
+% ---- Step 2: Insert "hello" ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    \foreach \i/\val in {0/0, 1/1, 2/0, 3/0, 4/1, 5/0, 6/0, 7/0, 8/0, 9/1} {
+      \ifnum\val=1
+        \node[bit, fill=BitOne] (b\i) at (\i*0.6, 0) {\val};
+      \else
+        \node[bit, fill=BitZero] (b\i) at (\i*0.6, 0) {\val};
+      \fi
+      \node[font=\tiny, text=MedGray] at (\i*0.6, -0.45) {\i};
+    }
+    \node[lbl, anchor=east] at (-0.5, 0) {$B$:};
+    
+    % Arrows from element
+    \node[hashbox] (elem) at (2.7, 1.5) {\texttt{"hello"}};
+    \draw[arrow, AccentBlue] (elem.south) -- ++(0, -0.3) -| (b1.north);
+    \draw[arrow, AccentTeal] (elem.south) -- ++(0, -0.3) -| (b4.north);
+    \draw[arrow, AccentOrange] (elem.south) -- ++(0, -0.3) -| (b9.north);
+  \end{tikzpicture}
+  \caption{After inserting \texttt{"hello"}: bits 1, 4, and 9 are set.}
+  \label{fig:bloom-insert-hello}
+\end{figure}
+
+\textbf{Insert ``world''.} Suppose:
+\[
+  h_1(\texttt{"world"}) = 3, \quad 
+  h_2(\texttt{"world"}) = 4, \quad 
+  h_3(\texttt{"world"}) = 7
+\]
+We set $B[3], B[4], B[7] \leftarrow 1$. Note that $B[4]$ was already 1 
+from inserting \texttt{"hello"}, it remains 1. This overlap is normal 
+and is the source of false positives.
+
+% ---- Step 3: Insert "world" ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    \foreach \i/\val in {0/0, 1/1, 2/0, 3/1, 4/1, 5/0, 6/0, 7/1, 8/0, 9/1} {
+      \ifnum\val=1
+        \node[bit, fill=BitOne] (b\i) at (\i*0.6, 0) {\val};
+      \else
+        \node[bit, fill=BitZero] (b\i) at (\i*0.6, 0) {\val};
+      \fi
+      \node[font=\tiny, text=MedGray] at (\i*0.6, -0.45) {\i};
+    }
+    \node[lbl, anchor=east] at (-0.5, 0) {$B$:};
+    
+    % Arrows from element
+    \node[hashbox] (elem) at (3.9, 1.5) {\texttt{"world"}};
+    \draw[arrow, AccentBlue] (elem.south) -- ++(0, -0.3) -| (b3.north);
+    \draw[arrow, AccentTeal] (elem.south) -- ++(0, -0.3) -| (b4.north);
+    \draw[arrow, AccentOrange] (elem.south) -- ++(0, -0.3) -| (b7.north);
+  \end{tikzpicture}
+  \caption{After inserting \texttt{"world"}: bits 3, 4, and 7 are set. 
+           Bit 4 was already set by \texttt{"hello"}.}
+  \label{fig:bloom-insert-world}
+\end{figure}
+
+Now we query three elements that were \emph{never} inserted to illustrate 
+the filter's behavior.
+
+\textbf{Query ``cat'', true negative.} Suppose:
+\[
+  h_1(\texttt{"cat"}) = 2, \quad 
+  h_2(\texttt{"cat"}) = 5, \quad 
+  h_3(\texttt{"cat"}) = 7
+\]
+We check $B[2] = 0$. Since at least one bit is 0, the filter returns 
+\textsc{no} --- \texttt{"cat"} is \textbf{definitely not} in the set. 
+This answer is guaranteed correct.
+
+% ---- Step 4: Query "cat" — true negative ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    \foreach \i/\val in {0/0, 1/1, 2/0, 3/1, 4/1, 5/0, 6/0, 7/1, 8/0, 9/1} {
+      \ifnum\val=1
+        \node[bit, fill=BitOne] (b\i) at (\i*0.6, 0) {\val};
+      \else
+        \node[bit, fill=BitZero] (b\i) at (\i*0.6, 0) {\val};
+      \fi
+      \node[font=\tiny, text=MedGray] at (\i*0.6, -0.45) {\i};
+    }
+    \node[lbl, anchor=east] at (-0.5, 0) {$B$:};
+    
+    % Query arrows
+    \node[hashbox] (elem) at (2.4, 1.5) {\texttt{"cat"}};
+    \draw[arrow, AccentRed] (elem.south) -- ++(0, -0.3) -| (b2.north);
+    \draw[arrow, AccentRed] (elem.south) -- ++(0, -0.3) -| (b5.north);
+    \draw[arrow, AccentGreen] (elem.south) -- ++(0, -0.3) -| (b7.north);
+    
+    % X marks on the 0-bits
+    \node[font=\bfseries, text=AccentRed] at (2*0.6, 0.65) {\texttimes};
+    \node[font=\bfseries, text=AccentRed] at (5*0.6, 0.65) {\texttimes};
+        \node[font=\small, text=AccentGreen] at (7*0.6, 0.65) {\checkmark};
+
+    
+    % Result
+    \node[lbl, text=AccentRed, anchor=west] at (6.5, 0) 
+      {$B[2] = 0 \Rightarrow$ \textbf{definitely not in set}};
+  \end{tikzpicture}
+  \caption{Querying \texttt{"cat"}: bit 2 is 0, so the filter correctly 
+           returns \textsc{no}.}
+  \label{fig:bloom-query-cat}
+\end{figure}
+
+\textbf{Query ``dog'' yields a false positive.} Suppose:
+\[
+  h_1(\texttt{"dog"}) = 1, \quad 
+  h_2(\texttt{"dog"}) = 3, \quad 
+  h_3(\texttt{"dog"}) = 7
+\]
+We check $B[1] = 1$, $B[3] = 1$, $B[7] = 1$. All three bits are set, 
+so the filter returns \textsc{yes}. But \texttt{"dog"} was never inserted, bit 1 was set by \texttt{"hello"}, bit 3 by \texttt{"world"}, and 
+bit 7 by \texttt{"world"}. This is a \textbf{false positive}: the filter 
+is wrong, but has no way to know it.
+
+% ---- Step 5: Query "dog" — false positive ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    \foreach \i/\val in {0/0, 1/1, 2/0, 3/1, 4/1, 5/0, 6/0, 7/1, 8/0, 9/1} {
+      \ifnum\val=1
+        \node[bit, fill=BitOne] (b\i) at (\i*0.6, 0) {\val};
+      \else
+        \node[bit, fill=BitZero] (b\i) at (\i*0.6, 0) {\val};
+      \fi
+      \node[font=\tiny, text=MedGray] at (\i*0.6, -0.45) {\i};
+    }
+    \node[lbl, anchor=east] at (-0.5, 0) {$B$:};
+    
+    % Query arrows
+    \node[hashbox] (elem) at (2.4, 1.5) {\texttt{"dog"}};
+    \draw[arrow, AccentGreen] (elem.south) -- ++(0, -0.3) -| (b1.north);
+    \draw[arrow, AccentGreen] (elem.south) -- ++(0, -0.3) -| (b3.north);
+    \draw[arrow, AccentGreen] (elem.south) -- ++(0, -0.3) -| (b7.north);
+    
+    % Check marks on the 1-bits
+    \node[font=\small, text=AccentGreen] at (1*0.6, 0.65) {\checkmark};
+    \node[font=\small, text=AccentGreen] at (3*0.6, 0.65) {\checkmark};
+    \node[font=\small, text=AccentGreen] at (7*0.6, 0.65) {\checkmark};
+    
+    % Result
+    \node[lbl, text=AccentOrange, anchor=west, align=left] at (6.5, 0.3) 
+      {All bits are 1};
+    \node[lbl, text=AccentOrange, anchor=west, align=left] at (6.5, -0.2) 
+      {$\Rightarrow$ \textbf{false positive!}};
+  \end{tikzpicture}
+  \caption{Querying \texttt{"dog"}: all checked bits happen to be 1 
+           (set by other insertions), so the filter incorrectly returns 
+           \textsc{yes}. This is a false positive.}
+  \label{fig:bloom-query-dog}
+\end{figure}
+
+\begin{insightbox}[Why False Positives Happen]
+A Bloom filter only stores bits, not the elements themselves. When multiple 
+elements set overlapping bits, the filter cannot distinguish whether a 
+particular combination of 1-bits was caused by the queried element or by 
+a coincidence of other insertions. This is the fundamental tradeoff: we 
+use far less memory than storing elements explicitly, but we accept a 
+small probability $\epsilon$ of false positives.
+\end{insightbox}
+
+This example also reveals two important limitations of the Bloom filter 
+that motivate the data structures in later chapters:
+
+\begin{enumerate}
+  \item \textbf{No deletion:} We cannot remove \texttt{"hello"} from the 
+        filter by setting bits 1, 4, and 9 back to 0, as the bit 4 is shared 
+        with \texttt{"world"}, so clearing it would create a 
+        \emph{false negative}, which Bloom filters must never produce.
+  \item \textbf{No expansion:} The bit array size $m$ is fixed at creation. 
+        As more elements are inserted, the array fills with 1-bits, and 
+        the false positive rate increases. The only remedy is to rebuild 
+        the entire filter with a larger $m$, which requires access to all 
+        original elements.
+\end{enumerate}
+
+
+\subsection{False Positive Rate}
+
+We can quantify the probability of a false positive, using an analysis that follows the treatment in \cite{mitzenmacher}. 
+
+\[
+  \Pr[\text{bit is picked}] = \frac{1}{m}
+\]
+
+\[
+  \Pr[\text{bit is not picked}] = 1 - \frac{1}{m}
+\]
+
+As inserting on element runs $k$ hash functions, the probability that a specific bit is not set by one element is:
+\[
+    \Pr[\text{bit not set by one element}] = \left(1 -
+    \frac{1}{m}\right)^k
+\]
+
+After inserting $n$ 
+elements into a Bloom filter with $m$ bits and $k$ hash functions, the 
+probability that a single bit is still 0 is:
+\[
+  \Pr[\text{bit} = 0] = \left(1 - \frac{1}{m}\right)^{kn} = \left(\left(1 - \frac{1}{m}\right)^{m}\right)^{kn/m}
+\]
+
+When $m$ is large, we can use the approximation $(1 - 1/m)^m \approx e^{-1}$ to simplify the expression.
+
+\[
+\left(\left(1 - \frac{1}{m}\right)^{m}\right)^{kn/m} \approx (e^{-1})^{kn/m} = e^{-kn/m}
+\]
+
+A false positive occurs when all $k$ bits checked for a non-member happen 
+to be 1. Since each bit is 1 with probability $1 - e^{-kn/m}$, the false 
+positive rate is:
+
+\begin{equation}
+  \epsilon \approx \left(1 - e^{-kn/m}\right)^k
+  \label{eq:bloom-fpr}
+\end{equation}
+
+To find the optimal number of hash functions $k$ that minimizes $\epsilon$ for a given $m/n$, we can take the derivative of $\epsilon$ with respect to $k$ and set it to zero.
+
+Let $p = e^{-kn/m}$. Then $\epsilon$ can be rewritten as:
+\[
+  \epsilon = (1 - p)^k
+\]
+Taking the natural logarithm:
+\[
+    \ln \epsilon = k \ln(1 - p)
+\]
+Now, we differentiate with respect to $k$:
+\[
+    \frac{d}{dk} \ln \epsilon = \ln(1 - p
+) + k \cdot \frac{-1}{1 - p} \cdot \frac{dp}{dk}
+\]
+Calculating $\frac{dp}{dk}$:
+\[
+    \frac{dp}{dk} = \frac{d}{dk} e^{-kn/m} = -\frac{n}{m} e^{-kn/m} = -\frac{n}{m} p
+\]
+Substituting back:
+\[
+    \frac{d}{dk} \ln \epsilon = \ln(1 - p) + k \cdot \frac{p}{1 - p} \cdot \frac{n}{m}
+\]  Setting this derivative to zero for optimality:
+\[
+    \ln(1 - p) + k \cdot \frac{p}{1 - p} \cdot \frac{n}{m} = 0
+\]  
+Rearranging gives:
+\[    k \cdot \frac{p}{1 - p} \cdot \frac{n}{m} = -\ln(1 - p) \]  
+
+
+\[
+    k = -\frac{m}{n}\ln(1-p) \cdot \frac{(1-p)}{p}
+\]
+From our definition of $p$ we get that:
+
+\[
+ k = \frac{-m\ln(p)}{n}
+\]
+Setting the two equation equal to each other
+
+\[
+ -\frac{m}{n}\ln(1-p) \cdot \frac{(1-p)}{p} = -\frac{m}n \cdot \ln(p)
+\]
+Cancel like terms and simplify:
+
+\[
+p\ln(p)  = (1-p)\ln(1-p)
+\]
+We get that $p = 1/2$, meaning that 
+
+\[
+ k = \frac{-m\ln(1/2)}{n} = \frac{m}{n}\ln(2)
+\]
+Formally we can state that, for a given ratio of bits per element $m/n$, where $m$ is the size of the bit array and $n$ is the number of 
+elements to store, the optimal number of hash functions that minimizes 
+$\epsilon$ is:
+\begin{equation}
+  k_{\text{opt}} = \frac{m}{n} \ln 2
+  \label{eq:bloom-optimal-k}
+\end{equation}
+
+Substituting $k_{\text{opt}}$ back into Equation~\ref{eq:bloom-fpr} gives:
+\begin{equation}
+  \epsilon_{\text{opt}} \approx \left(\frac{1}{2}\right)^{k_{\text{opt}}} 
+  = \left(\frac{1}{2}\right)^{\frac{m}{n} \ln 2} =  \left(\left(\frac{1}{2}\right)^{\ln 2}\right)^{\frac{m}{n}} = (0.6185)^{\frac{m}{n}}
+  \label{eq:bloom-fpr-optimal}
+\end{equation}
+
+This tells us that the false positive rate decreases \emph{exponentially} 
+as we allocate more bits per element. The following table and figure 
+illustrate this relationship:
+
+\begin{table}[H]
+  \centering
+  \caption{False positive rate vs.\ bits per element (with optimal $k$)}
+  \label{tab:bloom-fpr}
+  \begin{tabular}{c c c}
+    \hline
+    \textbf{Bits per element} ($m/n$) & \textbf{Optimal $k$} & \textbf{FPR} ($\epsilon$) \\
+    \hline
+    4  & 3  & 14.7\%   \\
+    6  & 4  & 5.6\%   \\
+    8  & 6  & 2.2\%  \\
+    10 & 7  & 0.82\% \\
+    12 & 8  & 0.31\% \\
+    16 & 11 & 0.046\% \\
+    20 & 14 & 0.0067\% \\
+    \hline
+  \end{tabular}
+\end{table}
+
+% ---- FPR vs bits-per-element graph ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[scale=1]
+    % Axes
+    \draw[arrow] (0, 0) -- (8.5, 0) 
+      node[right, font=\small] {bits per element ($m/n$)};
+    \draw[arrow] (0, 0) -- (0, 5.5) 
+      node[above, font=\small] {FPR ($\epsilon$)};
+    
+    % Y-axis labels (percentage)
+    \foreach \y/\label in {0/0\%, 1/5\%, 2/10\%, 3/15\%, 4/20\%, 5/25\%} {
+      \draw (-0.1, \y) -- (0.1, \y);
+      \node[font=\scriptsize, anchor=east] at (-0.15, \y) {\label};
+    }
+    
+    % X-axis labels
+    \foreach \x/\label in {1/2, 2/4, 3/6, 4/8, 5/10, 6/12, 7/16, 8/20} {
+      \draw (\x, -0.1) -- (\x, 0.1);
+      \node[font=\scriptsize, anchor=north] at (\x, -0.15) {\label};
+    }
+    
+    % Grid lines (light)
+    \foreach \y in {1, 2, 3, 4, 5} {
+      \draw[gray!20] (0, \y) -- (8.5, \y);
+    }
+    \foreach \x in {1, 2, 3, 4, 5, 6, 7, 8} {
+      \draw[gray!20] (\x, 0) -- (\x, 5.5);
+    }
+    
+    % Plot using corrected values:
+    % y-axis: 1 unit = 5%, so y = FPR/5
+    % x-axis: x=2 -> m/n=4, x=3 -> m/n=6, etc.
+    %
+    % m/n=4:  14.7%  -> x=2, y=2.94
+    % m/n=6:  5.6%   -> x=3, y=1.12
+    % m/n=8:  2.2%   -> x=4, y=0.44
+    % m/n=10: 0.82%  -> x=5, y=0.164
+    % m/n=12: 0.31%  -> x=6, y=0.062
+    % m/n=16: 0.046% -> x=7, y=0.0092
+    % m/n=20: 0.0067%-> x=8, y=0.00134
+    
+    % Curve
+    \draw[AccentBlue, very thick, smooth] plot coordinates {
+      (1, 5.5)
+      (1.5, 4.2)
+      (2, 2.94)
+      (2.5, 1.9)
+      (3, 1.12)
+      (3.5, 0.72)
+      (4, 0.44)
+      (5, 0.164)
+      (6, 0.062)
+      (7, 0.0092)
+      (8, 0.00134)
+    };
+    
+    % Data points from table
+    \fill[AccentBlue] (2, 2.94) circle (2pt);   % m/n=4
+    \fill[AccentBlue] (3, 1.12) circle (2pt);   % m/n=6
+    \fill[AccentBlue] (4, 0.44) circle (2pt);   % m/n=8
+    \fill[AccentBlue] (5, 0.164) circle (2pt);  % m/n=10
+    \fill[AccentBlue] (6, 0.062) circle (2pt);  % m/n=12
+    \fill[AccentBlue] (7, 0.0092) circle (2pt); % m/n=16
+    \fill[AccentBlue] (8, 0.00134) circle (2pt);% m/n=20
+    
+    % Highlighted point: 10 bits/element
+    \fill[AccentRed] (5, 0.164) circle (3pt);
+    \node[font=\scriptsize, text=AccentRed, anchor=south west] at (5.1, 0.3) 
+      {$m/n = 10 \Rightarrow \epsilon \approx 0.82\%$};
+    
+    % Highlighted point: 8 bits/element  
+    \fill[AccentTeal] (4, 0.44) circle (3pt);
+    \node[font=\scriptsize, text=AccentTeal, anchor=south west] at (4.1, 0.6) 
+      {$m/n = 8 \Rightarrow \epsilon \approx 2.2\%$};
+    
+    % Annotation: diminishing returns region
+    \draw[brace] (5, -1) -- (8, -1) 
+      node[midway, below=0pt, font=\scriptsize, text=DarkGray, align=center] 
+      {diminishing returns:\\FPR already very low};
+    
+    % Annotation: steep decline region
+    \draw[brace] (1, -1) -- (4, -1) 
+      node[midway, below=0pt, font=\scriptsize, text=DarkGray, align=center] 
+      {adding bits here\\has the biggest impact};
+  \end{tikzpicture}
+  \caption{False positive rate as a function of bits per element with 
+           optimal $k$. The rate decreases exponentially: doubling the 
+           bits per element roughly squares the improvement. This means that as the total ratio of bits per element increases, the FPR goes down.}
+  \label{fig:bloom-fpr-curve}
+\end{figure}
+
+Equation~\ref{eq:bloom-fpr-optimal} and Figure~\ref{fig:bloom-fpr-curve} 
+reveal an important practical insight: a Bloom filter with just 10 bits per 
+element achieves a false positive rate under 1\%, regardless of how large 
+the universe $U$ is. This extreme space efficiency, requiring only 
+$\approx 1.25$ bytes per element for sub-1\% error, is what makes Bloom 
+filters so widely deployed.
+
+\subsection{Space Efficiency}
+
+From an information-theoretic perspective, any data structure that answers 
+membership queries with a false positive rate of $\epsilon$ must use at 
+least $\log_2(1/\epsilon)$ bits per element, this is the minimum amount 
+of information needed to distinguish ``in the set'' from ``not in the set'' 
+with error probability $\epsilon$.
+
+From Equation~\ref{eq:bloom-fpr-optimal}, we can solve for the number of 
+bits per element required by a Bloom filter. Taking the logarithm of both 
+sides gives:
+\[
+  \frac{m}{n} = \frac{\log_2(1/\epsilon)}{\ln 2} = 1.44 \log_2(1/\epsilon)
+\]
+
+A space-optimized Bloom filter therefore uses $1.44 \log_2(1/\epsilon)$ bits 
+per element \cite{bloom, cuckoo}, which is a 44\% overhead over the 
+information-theoretic lower bound of $\log_2(1/\epsilon)$ bits. In practice, 
+this overhead is a modest price for the simplicity and speed of the data 
+structure.
+
+\begin{comment}
+% ---- EXAMPLE: Bloom Filter bit array diagram ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    % Draw bit array
+    \foreach \i/\val in {0/0, 1/1, 2/0, 3/1, 4/1, 5/0, 6/0, 7/1, 8/0, 9/1} {
+      \ifnum\val=1
+        \node[bit, fill=BitOne] (b\i) at (\i*0.6, 0) {\val};
+      \else
+        \node[bit, fill=BitZero] (b\i) at (\i*0.6, 0) {\val};
+      \fi
+      \node[font=\tiny, text=MedGray] at (\i*0.6, -0.45) {\i};
+    }
+    
+    % Label
+    \node[lbl, anchor=east] at (-0.5, 0) {Bit array:};
+    
+    % Show hash arrows from an element
+    \node[hashbox] (elem) at (2.7, 1.5) {$h(x)$};
+    \draw[arrow, AccentBlue] (elem.south) -- ++(0, -0.3) -| (b1.north);
+    \draw[arrow, AccentTeal] (elem.south) -- ++(0, -0.3) -| (b4.north);
+    \draw[arrow, AccentOrange] (elem.south) -- ++(0, -0.3) -| (b9.north);
+    
+    % Annotation
+    \node[lbl, anchor=west] at (6.5, 1.5) {Element $x$ hashed};
+    \node[lbl, anchor=west] at (6.5, 1.0) {to positions 1, 4, 9};
+  \end{tikzpicture}
+  \caption{A Bloom filter with 10 bits and 3 hash functions.}
+  \label{fig:bloom-basic}
+\end{figure}
+\end{comment}
+
+
+\section{Cuckoo Filters}
+
+Cuckoo hashing is a collision resolution scheme that guarantees worst-case 
+constant-time lookups. While several variants exist, we present the standard 
+formulation using two hash tables.
+
+A cuckoo hash table consists of two tables $T_1$ and $T_2$, each of size $r$, 
+along with two independent hash functions $h_1, h_2 : U \to \{0, 1, \ldots, r-1\}$. 
+Each element $x \in S$ is stored in exactly one of two possible locations: 
+either $T_1[h_1(x)]$ or $T_2[h_2(x)]$.
+
+
+\subsection{Structure and Operations}
+
+The data structure is initalized to 
+\[
+  T_1[j] \leftarrow \varnothing \quad \text{and} \quad T_2[j] \leftarrow \varnothing 
+  \quad \forall \, j \in \{0, 1, \dots, rr-1\}
+\]
+The data structure supports three operations:
+\begin{enumerate}
+  \item \textbf{Search:} To determine whether $x \in S$, we examine 
+        $T_1[h_1(x)]$ and $T_2[h_2(x)]$. Since each lookup is a direct 
+        array access, search runs in $O(1)$ worst-case time.
+        
+  \item \textbf{Delete:} To remove an element $x$, we check both candidate 
+        positions $T_1[h_1(x)]$ and $T_2[h_2(x)]$. If $x$ occupies either 
+        location, we remove it. This operation also runs in $O(1)$ worst-case time.
+        
+  \item \textbf{Insert:} To insert an element $x$, we attempt to place it 
+        in $T_1[h_1(x)]$. If this position is occupied by some element $y$, 
+        we evict $y$ and attempt to place $y$ in its alternate location. 
+        This process continues until either an empty slot is found or a 
+        cycle is detected, necessitating a rehash with new hash functions.
+\end{enumerate}
+
+
+
+\subsection{Worked Example}
+
+We begin with two empty tables of size 4:
+
+% ---- Step 1: Empty tables ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    % Table 1
+    \node[lbl, font=\bfseries] at (1.95, 1) {$T_1$ (via $h_1$)};
+    \foreach \i in {0,...,3} {
+      \node[emptyslot, minimum width=1.3cm] (a\i) at (\i*1.4, 0.3) {};
+      \node[font=\tiny, text=MedGray] at (\i*1.4, -0.25) {\i};
+    }
+    
+    % Table 2
+    \node[lbl, font=\bfseries] at (1.95, -1.2) {$T_2$ (via $h_2$)};
+    \foreach \i in {0,...,3} {
+      \node[emptyslot, minimum width=1.3cm] (b\i) at (\i*1.4, -1.9) {};
+      \node[font=\tiny, text=MedGray] at (\i*1.4, -2.45) {\i};
+    }
+  \end{tikzpicture}
+  \caption{Two empty hash tables for cuckoo hashing.}
+  \label{fig:cuckoo-empty}
+\end{figure}
+
+\textbf{Insert ``A'':} Suppose $h_1(\texttt{A}) = 1$ and $h_2(\texttt{A}) = 2$.
+Slot 1 in $T_1$ is empty, so we place \texttt{A} there:
+
+% ---- Step 2: Insert A ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    % Table 1
+    \node[lbl, font=\bfseries] at (1.95, 1) {$T_1$};
+    \foreach \i in {0,...,3} {
+      \node[emptyslot, minimum width=1.3cm] (a\i) at (\i*1.4, 0.3) {};
+      \node[font=\tiny, text=MedGray] at (\i*1.4, -0.25) {\i};
+    }
+    \node[fullslot, minimum width=1.3cm] at (1*1.4, 0.3) {\fp{A}};
+    
+    % Table 2
+    \node[lbl, font=\bfseries] at (1.95, -1.2) {$T_2$};
+    \foreach \i in {0,...,3} {
+      \node[emptyslot, minimum width=1.3cm] (b\i) at (\i*1.4, -1.9) {};
+      \node[font=\tiny, text=MedGray] at (\i*1.4, -2.45) {\i};
+    }
+    
+    % Arrow showing where A went
+    \node[hashbox] (key) at (-1.8, 0.3) {\texttt{A}};
+    \draw[arrow, AccentBlue] (key.east) -- (a1.west)
+      node[midway, above=10pt, font=\scriptsize, text=AccentBlue] {$h_1 = 1$};
+  \end{tikzpicture}
+  \caption{Insert \texttt{A}: placed in $T_1[1]$.}
+  \label{fig:cuckoo-insert-a}
+\end{figure}
+
+\textbf{Insert ``B'':} Suppose $h_1(\texttt{B}) = 3$ and $h_2(\texttt{B}) = 0$.
+Slot 3 in $T_1$ is empty, so we place \texttt{B} there:
+
+% ---- Step 3: Insert B ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    % Table 1
+    \node[lbl, font=\bfseries] at (1.95, 1) {$T_1$};
+    \foreach \i in {0,...,3} {
+      \node[emptyslot, minimum width=1.3cm] (a\i) at (\i*1.4, 0.3) {};
+      \node[font=\tiny, text=MedGray] at (\i*1.4, -0.25) {\i};
+    }
+    \node[fullslot, minimum width=1.3cm] at (1*1.4, 0.3) {\fp{A}};
+    \node[fullslot, minimum width=1.3cm] at (3*1.4, 0.3) {\fp{B}};
+    
+    % Table 2
+    \node[lbl, font=\bfseries] at (1.95, -1.2) {$T_2$};
+    \foreach \i in {0,...,3} {
+      \node[emptyslot, minimum width=1.3cm] (b\i) at (\i*1.4, -1.9) {};
+      \node[font=\tiny, text=MedGray] at (\i*1.4, -2.45) {\i};
+    }
+    
+    % Arrow
+    \node[hashbox] (key) at (-1.8, 0.3) {\texttt{B}};
+    \draw[arrow, AccentBlue] (key.east) -- (a3.west)
+      node[midway, above=10pt, font=\scriptsize, text=AccentBlue, xshift=-10px] {$h_1 = 3$};
+  \end{tikzpicture}
+  \caption{Insert \texttt{B}: placed in $T_1[3]$.}
+  \label{fig:cuckoo-insert-b}
+\end{figure}
+
+\textbf{Insert ``C'':} Suppose $h_1(\texttt{C}) = 1$ and 
+$h_2(\texttt{C}) = 3$. Slot 1 in $T_1$ is occupied by \texttt{A}. So 
+\texttt{C} \emph{evicts} \texttt{A} from $T_1[1]$, and \texttt{A} moves 
+to its alternative location $h_2(\texttt{A}) = 2$ in $T_2$:
+
+% ---- Step 4: Insert C with eviction ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    % Table 1
+    \node[lbl, font=\bfseries] at (1.95, 1) {$T_1$};
+    \foreach \i in {0,...,3} {
+      \node[emptyslot, minimum width=1.3cm] (a\i) at (\i*1.4, 0.3) {};
+      \node[font=\tiny, text=MedGray] at (\i*1.4, -0.25) {\i};
+    }
+    \node[fullslot, minimum width=1.3cm] (ac) at (1*1.4, 0.3) {\fp{C}};
+    \node[fullslot, minimum width=1.3cm] at (3*1.4, 0.3) {\fp{B}};
+    
+    % Table 2
+    \node[lbl, font=\bfseries] at (1.95, -1.2) {$T_2$};
+    \foreach \i in {0,...,3} {
+      \node[emptyslot, minimum width=1.3cm] (b\i) at (\i*1.4, -1.9) {};
+      \node[font=\tiny, text=MedGray] at (\i*1.4, -2.45) {\i};
+    }
+    \node[fullslot, minimum width=1.3cm] (ba) at (2*1.4, -1.9) {\fp{A}};
+    
+    % Eviction arrow
+    \draw[arrow, AccentRed, thick] (ac.south) to[out=-100, in=90] (ba.north)
+      node[midway, yshift=-25px, right=4pt, font=\scriptsize, text=AccentRed, align=left] 
+      {\texttt{A} evicted\\to $T_2[2]$};
+    
+    % Insert arrow
+    \node[hashbox] (key) at (-1.8, 0.3) {\texttt{C}};
+    \draw[arrow, AccentBlue] (key.east) -- (ac.west)
+      node[midway, above=10pt, font=\scriptsize, text=AccentBlue] {$h_1 = 1$};
+  \end{tikzpicture}
+  \caption{Insert \texttt{C}: evicts \texttt{A} from $T_1[1]$. 
+           \texttt{A} moves to its alternative slot $T_2[2]$.}
+  \label{fig:cuckoo-eviction}
+\end{figure}
+
+\textbf{Query ``A'': } To look up a key, we check both possible locations:
+$T_1[h_1(\texttt{A})] = T_1[1]$ contains \texttt{C} (not a match), but 
+$T_2[h_2(\texttt{A})] = T_2[2]$ contains \texttt{A}, meaning it was found. This 
+always takes at most 2 lookups, giving $\bigO{1}$ query time.
+
+\textbf{Delete ``A'':} To delete, we simply clear $T_2[2]$. Unlike Bloom 
+filters, deletion is straightforward because each key occupies exactly 
+one slot, clearing it cannot affect other keys.
+
+\begin{insightbox}[Bloom Filters vs.\ Cuckoo Hashing]
+In a Bloom filter, multiple keys share the same bits, making deletion 
+impossible without risking false negatives. In cuckoo hashing, each key 
+has its own dedicated slot, so deletion is safe. However, the table has 
+a fixed capacity, meaning that once both tables are sufficiently full, insertions 
+fail and the entire structure must be rebuilt. This inability to 
+\emph{expand} efficiently is the limitation that quotient filters and 
+ultimately the Aleph Filter address.
+\end{insightbox}
+
+
+% ---- EXAMPLE: Cuckoo filter with two possible slots ----
+\begin{comment}
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    % Bucket array
+    \foreach \i in {0,...,7} {
+      \node[emptyslot] (s\i) at (\i*1.3, 0) {};
+      \node[font=\tiny, text=MedGray] at (\i*1.3, -0.55) {\i};
+    }
+    
+    % Fill some slots with fingerprints
+    \node[fullslot] at (1*1.3, 0) {\fp{0xA3}};
+    \node[fullslot] at (3*1.3, 0) {\fp{0x7F}};
+    \node[fullslot] at (5*1.3, 0) {\fp{0x12}};
+    
+    % Show element hashing to two buckets
+    \node[above=1.2cm of s2, font=\small] (key) {key $k$};
+    \draw[arrow, AccentBlue] (key.south) -- (s2.north) 
+      node[midway, left, font=\scriptsize, text=AccentBlue] {$h_1(k)$};
+    \draw[arrow, AccentOrange] (key.south) to[out=-20, in=90] (s6.north)
+      node[midway, right, font=\scriptsize, text=AccentOrange] {$h_2(k)$};
+    
+    \node[lbl] at (4.5, -1.2) {Two candidate buckets per key};
+  \end{tikzpicture}
+  \caption{Cuckoo filter: each key maps to two possible buckets via two hash functions.}
+  \label{fig:cuckoo-basic}
+\end{figure}
+
+\end{comment}
+% ============================================================================
+% FROM CUCKOO HASHING TO CUCKOO FILTERS — formal version with diagrams
+% Paste this after your cuckoo hashing worked example
+% ============================================================================
+% ============================================================================
+% FROM CUCKOO HASHING TO CUCKOO FILTERS — clean version, no repeats
+% ============================================================================
+
+\subsection{From Cuckoo Hashing to Cuckoo Filters}
+
+The cuckoo hashing scheme presented above stores complete keys in each 
+table entry. A \textbf{cuckoo filter} \cite{cuckoo} modifies this design 
+by storing only an $f$-bit \textbf{fingerprint} $\phi(x)$ for each 
+element $x$, where $\phi : U \to \{0,1\}^f$ is a hash function mapping 
+elements to compact bit strings. This transformation converts an exact 
+hash table into a probabilistic filter: it uses significantly less space, 
+but introduces false positives when two distinct elements $x \neq y$ 
+happen to satisfy $\phi(x) = \phi(y)$.
+
+\begin{definitionbox}[Fingerprint]
+A \textbf{fingerprint} $\phi(x)$ is an $f$-bit hash of element $x$. 
+The parameter $f$ controls the tradeoff between space and accuracy: 
+larger $f$ means more possible fingerprint values ($2^f$), reducing the 
+chance of collisions but increasing memory usage.
+\end{definitionbox}
+
+\subsubsection{Single-Array Structure and Bucket Positions}
+
+While our earlier presentation of cuckoo hashing used two separate 
+tables $T_1$ and $T_2$, the cuckoo filter consolidates them into a 
+single array $B$ of $m$ buckets using \textbf{partial-key cuckoo hashing} 
+\cite{cuckoo}. To understand how the two candidate buckets are computed, 
+consider inserting the element \texttt{"hello"}:
+
+\begin{enumerate}
+  \item \textbf{Hash the full key:} Compute a hash of the original 
+        element, producing a large integer:
+        \[
+          H(\texttt{"hello"}) = \texttt{0xA3F7B21E9C4D8256} \quad \text{(64 bits)}
+        \]
+  
+  \item \textbf{Split the hash:} Divide the output into two 
+        non-overlapping parts:
+        \begin{itemize}
+          \item The \textbf{long part} determines the first bucket index.
+          \item The \textbf{short part} becomes the fingerprint 
+                $\phi(x)$, the only piece stored in the table.
+        \end{itemize}
+        
+% ---- Diagram: Hash splitting ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    \node[font=\small] at (-2.2, 0) {$H(x) =$};
+    
+    % Long part
+    \foreach \i/\val in {0/A, 1/3, 2/F, 3/7, 4/B, 5/2, 6/1, 7/E, 
+                          8/9, 9/C, 10/4, 11/D, 12/8, 13/2} {
+      \node[bit, fill=AccentTeal!15, minimum width=0.42cm] at (\i*0.42, 0) 
+        {\tiny\texttt{\val}};
+    }
+    
+    % Short part (fingerprint)
+    \foreach \i/\val in {14/5, 15/6} {
+      \node[bit, fill=AccentOrange!25, minimum width=0.42cm] at (\i*0.42, 0) 
+        {\tiny\texttt{\val}};
+    }
+    
+    % Braces
+    \draw[brace] (0*0.42-0.18, 0.45) -- (13*0.42+0.18, 0.45)
+      node[midway, above=8pt, font=\scriptsize, text=AccentTeal] 
+      {used to compute $h_1$ (then discarded)};
+    \draw[brace] (14*0.42-0.18, 0.45) -- (15*0.42+0.18, 0.45)
+      node[midway, above=20pt, font=\scriptsize, text=AccentOrange] 
+      {fingerprint $\phi(x)$ (stored)};
+  \end{tikzpicture}
+  \caption{A single hash of the key is split: the long part computes 
+           the bucket index, the short part becomes the stored fingerprint.
+           The two parts must not overlap to avoid correlation.}
+  \label{fig:hash-split}
+\end{figure}
+
+  \item \textbf{Compute the first bucket $h_1$:} Apply the modulo 
+        operation to the long part. The \textbf{modulo} operation 
+        $a \mod m$ returns the remainder after dividing $a$ by $m$, 
+        guaranteeing the result falls in $\{0, 1, \dots, m-1\}$ 
+        regardless of how large the hash value is:
+        \[
+          h_1(x) = \texttt{0xA3F7B21E9C4D82} \mod m
+        \]
+        For example, with $m = 8$ buckets:
+        \[
+          \texttt{0xA3F7B21E9C4D82} \mod 8 = 2
+        \]
+        So $h_1(x) = 2$.
+
+  \item \textbf{Compute the second bucket $h_2$:} Hash the fingerprint 
+        with a separate hash function, then XOR the result with $h_1$. 
+        Suppose $G(\texttt{0x56}) \mod m = 4$:
+        \[
+        h_2(x) = h_1(x) \oplus G(\phi(x)) = 2 \oplus 4 = 6
+        \]
+\end{enumerate}
+
+\noindent In general, for any element $x$:
+\begin{align}
+  h_1(x) &= H(x) \mod m \label{eq:cuckoo-h1} \\
+h_2(x) &= h_1(x) \oplus G(\phi(x)) \label{eq:cuckoo-h2}
+\end{align}
+
+After insertion, only the fingerprint (\texttt{0x56}) is stored in one 
+of the two candidate buckets. The original key \texttt{"hello"} and the 
+long part of the hash are discarded permanently.
+
+% ---- Diagram: Single array with two candidate buckets ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    % Array of buckets
+    \foreach \i in {0,...,7} {
+      \node[emptyslot, minimum width=1.1cm] (s\i) at (\i*1.2, 0) {};
+      \node[font=\tiny, text=MedGray] at (\i*1.2, -0.55) {\i};
+    }
+    
+    % Some occupied slots
+    \node[fullslot, minimum width=1.1cm] at (0*1.2, 0) {\fp{0xA3}};
+    \node[fullslot, minimum width=1.1cm] at (3*1.2, 0) {\fp{0x7F}};
+    \node[fullslot, minimum width=1.1cm] at (5*1.2, 0) {\fp{0x12}};
+    
+    % Element being inserted
+    \node[hashbox] (key) at (3.6, 2.2) {\texttt{"hello"}};
+    
+    % Fingerprint
+    \node[font=\scriptsize, text=DarkGray, xshift=50px, yshift=2.5px] at (3.6, 1.5) 
+      {$\phi(x) = \texttt{0x56}$};
+    
+    % Two candidate buckets
+    \draw[arrow, AccentBlue, thick] (key.south) -- ++(0, -0.5) -| (s2.north)
+      node[pos=0.75, left, font=\scriptsize, text=AccentBlue] 
+      {$h_1 = 2$};
+    \draw[arrow, AccentOrange, thick] (key.south) -- ++(0, -0.5) -| (s6.north)
+      node[pos=0.75, right, font=\scriptsize, text=AccentOrange] 
+      {$h_2 = 6$};
+    
+    % Label
+    \node[lbl, font=\small] at (4.2, -1.2) 
+      {Single array $B$: fingerprint \texttt{0x56} can go in bucket 2 or 6};
+  \end{tikzpicture}
+  \caption{The cuckoo filter stores fingerprints in a single array. 
+           Element \texttt{"hello"} maps to buckets 2 and 6; only the 
+           fingerprint \texttt{0x56} is stored in one of them.}
+  \label{fig:cuckoo-filter-array}
+\end{figure}
+
+\begin{insightbox}[Why Re-Hash the Fingerprint?]
+In step 4, the fingerprint is hashed before XOR-ing with $h_1$. Without 
+this, $h_2 = h_1 \oplus \phi(x)$ directly would constrain the alternate 
+bucket to within $2^f$ positions of $h_1$ (e.g., within 256 positions for 
+$f = 8$). Hashing the fingerprint first spreads the alternate buckets 
+uniformly across the entire table \cite{cuckoo}.
+\end{insightbox}
+
+\subsubsection{XOR Symmetry and Eviction}
+
+The choice of XOR in Equation~\ref{eq:cuckoo-h2} is not arbitrary. XOR 
+has a unique algebraic property: \textbf{it is its own inverse}. For any 
+values $a$ and $b$:
+\begin{equation}
+  a \oplus b = c \quad \Longrightarrow \quad c \oplus b = a
+  \label{eq:xor-inverse}
+\end{equation}
+
+At the bit level, XOR flips specific bits. Applying it again flips them 
+back, restoring the original value:
+\[
+  \underset{2}{\texttt{010}} \;\oplus\; \underset{4}{\texttt{100}} 
+  \;=\; \underset{6}{\texttt{110}}
+  \qquad \text{and} \qquad
+  \underset{6}{\texttt{110}} \;\oplus\; \underset{4}{\texttt{100}} 
+  \;=\; \underset{2}{\texttt{010}}
+\]
+
+This means that given \emph{either} bucket index and the hashed 
+fingerprint, the \emph{other} bucket is always recoverable:
+\[
+  \underbrace{h_1(x)}_{2} \;\oplus\; 
+  \underbrace{\text{hash}(\phi(x))}_{4} \;=\; 
+  \underbrace{h_2(x)}_{6}
+  \qquad \text{and} \qquad
+  \underbrace{h_2(x)}_{6} \;\oplus\; 
+  \underbrace{\text{hash}(\phi(x))}_{4} \;=\; 
+  \underbrace{h_1(x)}_{2}
+\]
+
+During eviction, the filter holds a fingerprint in some bucket $i$ but 
+does not know whether $i$ is $h_1$ or $h_2$, it does not matter. The 
+same formula always yields the alternate bucket:
+\begin{equation}
+  j = i \oplus \text{hash}(\phi(x))
+  \label{eq:cuckoo-alternate}
+\end{equation}
+
+This is essential because the original key $x$ has been discarded. 
+Without XOR symmetry, the filter would need to store the full key to 
+recompute $h_1(x) = \text{hash}(x) \mod m$, defeating the purpose of 
+using fingerprints.
+
+% ---- Diagram: XOR symmetry ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    % Two buckets
+    \node[fullslot, minimum width=2cm] (b1) at (0, 0) {\fp{0x56}};
+    \node[lbl, font=\small] at (0, -0.6) {bucket $i = 2$};
+    
+    \node[emptyslot, minimum width=2cm] (b2) at (6, 0) {};
+    \node[lbl, font=\small] at (6, -0.6) {bucket $j = 6$};
+    
+    % Forward arrow
+    \draw[arrow, AccentBlue, thick] 
+      ([yshift=3pt]b1.east) -- ([yshift=3pt]b2.west)
+      node[midway, above=6pt, font=\small, text=AccentBlue] 
+      {$j = 2 \oplus \text{hash}(\texttt{0x56}) = 6$};
+    
+    % Reverse arrow
+    \draw[arrow, AccentOrange, thick] 
+      ([yshift=-3pt]b2.west) -- ([yshift=-3pt]b1.east)
+      node[midway, below=6pt, font=\small, text=AccentOrange] 
+      {$i = 6 \oplus \text{hash}(\texttt{0x56}) = 2$};
+    
+    % Annotation
+    \node[lbl, font=\small, align=center] at (3, -1.5) 
+      {Same formula, either direction, only needs 
+       fingerprint + current bucket};
+  \end{tikzpicture}
+  \caption{XOR symmetry enables eviction without the original key: 
+           given any bucket index and the fingerprint, the alternate 
+           bucket is always computable.}
+  \label{fig:cuckoo-xor}
+\end{figure}
+
+\subsubsection{Bucket Structure}
+
+Each bucket holds up to $b$ fingerprints (typically $b = 4$). An 
+insertion requires eviction only when all $2b$ slots across both 
+candidate buckets are occupied. With $b = 4$, the table achieves a 
+\textbf{load factor} of $\alpha \approx 0.955$ before insertions begin 
+to fail \cite{cuckoo}. The load factor $\alpha$ is the fraction of 
+slots currently occupied, $\alpha = 0.955$ means 95.5\% of all slots 
+in the table are filled.
+
+% ---- Diagram: Bucket internals ----
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    % Bucket label
+    \node[lbl, font=\bfseries] at (-1.5, 0) {Bucket $i$:};
+    
+    % Four slots within one bucket
+    \node[fullslot, minimum width=1.5cm] (e0) at (0.3, 0) {\fp{0xA3}};
+    \node[fullslot, minimum width=1.5cm] (e1) at (1.9, 0) {\fp{0x7F}};
+    \node[fullslot, minimum width=1.5cm] (e2) at (3.5, 0) {\fp{0x12}};
+    \node[emptyslot, minimum width=1.5cm] (e3) at (5.1, 0) {};
+    
+    % Brace
+    \draw[brace] (e0.north west) -- (e3.north east)
+      node[midway, above=10pt, font=\small, text=DarkGray] 
+      {$b = 4$ fingerprint slots per bucket};
+    
+    % Slot labels
+    \node[font=\tiny, text=MedGray] at (0.3, -0.55) {slot 0};
+    \node[font=\tiny, text=MedGray] at (1.9, -0.55) {slot 1};
+    \node[font=\tiny, text=MedGray] at (3.5, -0.55) {slot 2};
+    \node[font=\tiny, text=MedGray] at (5.1, -0.55) {slot 3};
+    
+    % Arrow to empty slot
+    \draw[arrow, AccentGreen, thick] (5.1, -1.9) -- ([yshift=-15pt]e3.south)
+      node[pos=0, below, font=\scriptsize, text=AccentGreen] 
+      {insert here (no eviction needed)};
+  \end{tikzpicture}
+  \caption{A single bucket with $b = 4$ slots. Three fingerprints are 
+           stored; one slot remains empty. An insertion into this bucket 
+           takes the empty slot without triggering eviction.}
+  \label{fig:cuckoo-bucket}
+\end{figure}
+
+\subsubsection{Operations}
+
+The cuckoo filter supports three operations, each in $\bigO{1}$ time:
+
+\begin{enumerate}
+  \item \textbf{Insertion:} To insert element $x$, compute $\phi(x)$, $h_1(x)$, 
+and $h_2(x)$. If either bucket has an empty slot, place $\phi(x)$ there. 
+If both buckets are full (all $2b$ slots occupied), evict a random 
+fingerprint from one bucket and relocate it to its alternate bucket via 
+Equation~\ref{eq:cuckoo-alternate}. This process repeats until an empty 
+slot is found or a maximum number of evictions is reached.
+\item \textbf{Query:} To test whether $x \in S$, compute $\phi(x)$, $h_1(x)$, 
+and $h_2(x)$, then check both candidate buckets:
+\[
+  \text{query}(x) = \big(\phi(x) \in B[h_1(x)]\big) \;\lor\; 
+                     \big(\phi(x) \in B[h_2(x)]\big)
+\]
+If no matching fingerprint is found, $x$ is \textbf{definitely not} in 
+the set. If a match is found, $x$ is \textbf{probably} in the set, as the match may be a false positive caused by a different element with the 
+same fingerprint.
+\item \textbf{Deletion:} To remove $x$, locate $\phi(x)$ in either 
+$B[h_1(x)]$ or $B[h_2(x)]$ and remove one copy. This is safe because 
+each fingerprint occupies its own dedicated slot, removing it cannot 
+affect other elements. This is a key advantage over Bloom filters, where 
+bits are shared and deletion would risk creating false negatives.
+\end{enumerate}
+
+\subsubsection{False Positive Rate}
+
+A false positive occurs when a non-member $x$ has a fingerprint matching 
+one already stored in a candidate bucket. A query checks two buckets of 
+$b$ entries each, at most $2b$ fingerprints. Each $f$-bit fingerprint 
+matches with probability $1/2^f$, so:
+\begin{equation}
+  \epsilon \approx \frac{2b}{2^f}
+  \label{eq:cuckoo-fpr}
+\end{equation}
+
+Solving for the minimum fingerprint size $f$:
+\[
+  2^f \geq \frac{2b}{\epsilon} \quad \Longrightarrow \quad 
+  f \geq \log_2(1/\epsilon) + \log_2(2b)
+\]
+
+With $b = 4$, $\log_2(2 \cdot 4) = 3$. Applying the semi-sorting 
+optimization from \cite{cuckoo}, which saves one bit per fingerprint by 
+exploiting the irrelevance of fingerprint ordering within a bucket:
+\begin{equation}
+  f = \log_2(1/\epsilon) + 2
+  \label{eq:cuckoo-fp-size}
+\end{equation}
+
+\subsubsection{Space Efficiency}
+
+Since not every slot is occupied, the amortized cost per stored item 
+is the fingerprint size divided by the load factor $\alpha$:
+\begin{equation}
+  C_{\text{cuckoo}} = \frac{f}{\alpha} 
+  = \frac{\log_2(1/\epsilon) + 2}{\alpha} 
+  \quad \text{bits per item}
+  \label{eq:cuckoo-space}
+\end{equation}
+
+\begin{examplebox}[Space Comparison at $\epsilon = 1\%$]
+\textbf{Cuckoo filter} ($b = 4$, $\alpha = 0.955$):
+\[
+  C_{\text{cuckoo}} = \frac{\log_2(100) + 2}{0.955} 
+  = \frac{6.64 + 2}{0.955} \approx 9.1 \text{ bits/item}
+\]
+\textbf{Bloom filter} (Equation~\ref{eq:bloom-fpr-optimal}):
+\[
+  C_{\text{Bloom}} = 1.44 \cdot \log_2(100) 
+  = 1.44 \times 6.64 \approx 9.6 \text{ bits/item}
+\]
+At $\epsilon = 1\%$, the cuckoo filter uses 5\% less space while also 
+supporting deletion.
+\end{examplebox}
+
+\begin{table}[H]
+  \centering
+  \caption{Space comparison: Cuckoo filter ($b = 4$, $\alpha = 0.955$) 
+           vs.\ Bloom filter at various false positive rates.}
+  \label{tab:cuckoo-vs-bloom}
+  \begin{tabular}{c c c c}
+    \hline
+    \textbf{FPR} ($\epsilon$) & 
+    \textbf{Cuckoo} (bits/item) & 
+    \textbf{Bloom} (bits/item) & 
+    \textbf{Winner} \\
+    \hline
+    10\%     & 5.57  & 4.78  & Bloom \\
+    3\%      & 7.39  & 7.29  & $\approx$ tie \\
+    1\%      & 9.05  & 9.57  & Cuckoo \\
+    0.1\%    & 12.53 & 14.35 & Cuckoo \\
+    0.01\%   & 16.01 & 19.13 & Cuckoo \\
+    \hline
+  \end{tabular}
+\end{table}
+
+The crossover occurs at $\epsilon \approx 3\%$: below this threshold, 
+the cuckoo filter's fixed $+2$ overhead 
+(Equation~\ref{eq:cuckoo-fp-size}) becomes a diminishing fraction of the 
+growing $\log_2(1/\epsilon)$ term, while the Bloom filter's $1.44\times$ 
+multiplicative factor scales proportionally.
+
+\section{Summary of Filter Limitations}
+
+The cuckoo filter solves the Bloom filter's deletion problem but 
+inherits a critical limitation: \textbf{it cannot expand}. The array 
+size $m$ is fixed at construction. When the load factor approaches 
+$\alpha$, insertions fail. Expanding to a larger table of size $m' > m$ 
+would require recomputing:
+\[
+  h_1(x) = \text{hash}(x) \mod m'
+\]
+for every stored element. But the original keys have been discarded,
+only fingerprints remain, and $\phi(x)$ does not contain enough 
+information to reconstruct $\text{hash}(x)$.
+
+\begin{warningbox}[The Expansion Problem]
+Both Bloom filters and cuckoo filters have fixed capacity. The Bloom 
+filter cannot delete; the cuckoo filter cannot expand. A filter that 
+supports \emph{both} deletion and efficient expansion requires a 
+fundamentally different approach to storing fingerprints, one where 
+expansion does not require access to the original keys. This is the 
+problem that quotient filters address, and that the Aleph Filter 
+ultimately solves with $\bigO{1}$ operations.
+\end{warningbox}
+
+
+\begin{table}[H]
+  \centering
+  \caption{Capabilities and limitations of the filters discussed so far. 
+           The gaps in this table motivate the quotient filter family 
+           and the Aleph Filter.}
+  \label{tab:filter-limitations}
+  \begin{tabular}{l c c c}
+    \hline
+    \textbf{Property} & \textbf{Bloom} & \textbf{Cuckoo} & 
+    \textbf{Needed} \\
+    \hline
+    Insert         & $\bigO{k}$    & $\bigO{1}$*   & $\bigO{1}$ \\
+    Query          & $\bigO{k}$    & $\bigO{1}$    & $\bigO{1}$ \\
+    Delete         & \texttimes     & \checkmark     & \checkmark \\
+    Expand         & \texttimes     & \texttimes     & \checkmark \\
+    Stable FPR     & \texttimes     & \checkmark     & \checkmark \\
+    \hline
+  \end{tabular}
+  
+  \smallskip
+  {\small * = amortized. $k$ = number of hash functions.}
+\end{table}
+
+
+\begin{insightbox}[The Core Limitation]
+Bloom filters can't delete. Cuckoo filters can't expand efficiently.
+Quotient filters \emph{can} expand, but their query time degrades to
+$\bigO{\log N}$ as void entries accumulate. The Aleph Filter solves all three.
+\end{insightbox}
+
+
+% ============================================================================
+% CHAPTER 2: QUOTIENT FILTERS & EXPANSION
+% ============================================================================
+% ============================================================================
+% CHAPTER 2: QUOTIENT FILTERS AND EXPANSION
+% ============================================================================
